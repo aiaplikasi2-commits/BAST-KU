@@ -1,14 +1,22 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowRight,
+  ArrowUp,
   Download,
   Edit3,
   Loader2,
   Maximize2,
+  Minus,
+  Move,
+  Plus,
+  RotateCcw,
   Save,
   Share2,
   ZoomIn,
 } from 'lucide-react';
+import { saveUserSettings } from '../services/db';
 import { AppSettings, BastDocument, BastItem } from '../types';
 import {
   formatKopAddressLines,
@@ -46,6 +54,24 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
   const [fitMode, setFitMode] = useState<'full' | 'width' | '100'>('full');
   const [scale, setScale] = useState<number>(1);
   const [sheetHeight, setSheetHeight] = useState<number>(A4_MIN_HEIGHT_PX);
+  const [logoScalePct, setLogoScalePct] = useState<number>(
+    settings.logo_scale || 100
+  );
+  const [logoX, setLogoX] = useState<number>(settings.logo_x || 0);
+  const [logoY, setLogoY] = useState<number>(settings.logo_y || 0);
+  const [isDraggingLogo, setIsDraggingLogo] = useState(false);
+  const dragStartRef = useRef<{
+    clientX: number;
+    clientY: number;
+    startX: number;
+    startY: number;
+  } | null>(null);
+
+  useEffect(() => {
+    setLogoScalePct(settings.logo_scale || 100);
+    setLogoX(settings.logo_x || 0);
+    setLogoY(settings.logo_y || 0);
+  }, [settings.logo_scale, settings.logo_x, settings.logo_y]);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -53,6 +79,93 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
   const sortedItems = [...items].sort(
     (a, b) => a.urutan - b.urutan || a.nomor - b.nomor
   );
+
+  const persistLogoLayout = async (
+    nextScale: number,
+    nextX: number,
+    nextY: number
+  ) => {
+    if (settings.user_id && settings.user_id !== 'guest') {
+      await saveUserSettings(settings.user_id, {
+        ...settings,
+        logo_scale: nextScale,
+        logo_x: nextX,
+        logo_y: nextY,
+      });
+    }
+  };
+
+  const handleAdjustLogoScale = async (delta: number) => {
+    const nextVal = Math.max(40, Math.min(220, logoScalePct + delta));
+    setLogoScalePct(nextVal);
+    await persistLogoLayout(nextVal, logoX, logoY);
+  };
+
+  const handleSetLogoScale = async (val: number) => {
+    const nextVal = Math.max(40, Math.min(220, Math.round(val)));
+    setLogoScalePct(nextVal);
+    await persistLogoLayout(nextVal, logoX, logoY);
+  };
+
+  const handleNudgeLogoPos = async (dx: number, dy: number) => {
+    const nextX = Math.max(-150, Math.min(220, logoX + dx));
+    const nextY = Math.max(-120, Math.min(120, logoY + dy));
+    setLogoX(nextX);
+    setLogoY(nextY);
+    await persistLogoLayout(logoScalePct, nextX, nextY);
+  };
+
+  const handleResetLogoPos = async () => {
+    setLogoX(0);
+    setLogoY(0);
+    await persistLogoLayout(logoScalePct, 0, 0);
+  };
+
+  const handleLogoPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+    setIsDraggingLogo(true);
+    dragStartRef.current = {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      startX: logoX,
+      startY: logoY,
+    };
+  };
+
+  const handleLogoPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingLogo || !dragStartRef.current) return;
+    const effectiveScale = scale || 1;
+    const dx = Math.round(
+      (e.clientX - dragStartRef.current.clientX) / effectiveScale
+    );
+    const dy = Math.round(
+      (e.clientY - dragStartRef.current.clientY) / effectiveScale
+    );
+    const nextX = Math.max(
+      -150,
+      Math.min(220, dragStartRef.current.startX + dx)
+    );
+    const nextY = Math.max(
+      -120,
+      Math.min(120, dragStartRef.current.startY + dy)
+    );
+    setLogoX(nextX);
+    setLogoY(nextY);
+  };
+
+  const handleLogoPointerUp = async (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingLogo) return;
+    try {
+      (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
+    setIsDraggingLogo(false);
+    dragStartRef.current = null;
+    await persistLogoLayout(logoScalePct, logoX, logoY);
+  };
 
   // Auto-Fit calculation so the user can view the full A4 document cleanly on any screen
   useEffect(() => {
@@ -74,7 +187,6 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
       } else if (fitMode === 'width') {
         setScale(Math.min(1.15, availW / A4_WIDTH_PX));
       } else {
-        // 'full': Fit entire A4 page (both width & height) into the screen
         const scaleW = availW / A4_WIDTH_PX;
         const scaleH = availH / actualSheetH;
         setScale(Math.min(1, scaleW, scaleH));
@@ -95,7 +207,7 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
       window.removeEventListener('resize', computeScale);
       if (ro) ro.disconnect();
     };
-  }, [fitMode, sortedItems.length, bast, settings]);
+  }, [fitMode, sortedItems.length, bast, settings, logoScalePct]);
 
   const { kalimatLengkap } = getKalimatTanggalBast(bast.tanggal_bast);
   const tglMulaiIndo = formatTanggalIndonesia(bast.tanggal_mulai);
@@ -104,13 +216,20 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
   const kotaText = bast.kota?.trim() || settings.kota?.trim() || 'Bogor';
 
   const companyName =
-    settings.nama_perusahaan?.trim() || 'CV. MULIA TEKHNIK ABADI';
+    settings.nama_perusahaan?.trim() || 'CV.MULIA TEKHNIK ABADI';
   const companyAddress =
     settings.alamat?.trim() ||
     'Jl. Letda Nasir No.58 Desa Cikeas Udik Kecamatan Gunung Putri Kab. Bogor Kode Pos 16966';
   const balancedAddressLines = formatKopAddressLines(companyAddress);
   const logoSrc =
     settings.logo?.trim() || getCorporateEmblemDataUrl(companyName);
+
+  const effectiveSettings: AppSettings = {
+    ...settings,
+    logo_scale: logoScalePct,
+    logo_x: logoX,
+    logo_y: logoY,
+  };
 
   const sig1Src =
     bast.signature_party_1?.trim() || settings.signature_party_1?.trim() || '';
@@ -122,11 +241,12 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
       : '';
   const stempelTarget = settings.stempel_target || 'pihak_kedua';
   const stempelScale = (settings.stempel_scale || 100) / 100;
+  const logoScaleFactor = logoScalePct / 100;
 
   const handleDownloadPdf = async () => {
     setPdfBusy('download');
     try {
-      await downloadBastPdf(bast, sortedItems, settings);
+      await downloadBastPdf(bast, sortedItems, effectiveSettings);
     } finally {
       setPdfBusy(null);
     }
@@ -135,7 +255,7 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
   const handleSharePdf = async () => {
     setPdfBusy('share');
     try {
-      await shareBastPdf(bast, sortedItems, settings);
+      await shareBastPdf(bast, sortedItems, effectiveSettings);
     } catch {
       // User cancelled native share sheet
     } finally {
@@ -163,9 +283,9 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
             <ArrowLeft className="w-4 h-4" />
             Kembali
           </button>
-          <div className="hidden sm:block">
+          <div className="hidden md:block">
             <h3 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
-              VIEW PDF — A4 Portrait ({Math.round(scale * 100)}%)
+              VIEW PDF — A4 ({Math.round(scale * 100)}%)
             </h3>
             <p className="text-[11px] text-slate-500 font-mono tabular-nums">
               {bast.nomor_bast} · {bast.status}
@@ -173,44 +293,137 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
           </div>
         </div>
 
-        {/* Zoom / Auto-Fit Selector */}
-        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-          <button
-            type="button"
-            onClick={() => setFitMode('full')}
-            className={`min-h-[32px] px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition ${
-              fitMode === 'full'
-                ? 'bg-blue-900 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
-            }`}
-            title="Auto Fit 1 Halaman Penuh"
-          >
-            <Maximize2 className="w-3 h-3" />
-            Fit Full
-          </button>
-          <button
-            type="button"
-            onClick={() => setFitMode('width')}
-            className={`min-h-[32px] px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
-              fitMode === 'width'
-                ? 'bg-blue-900 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
-            }`}
-          >
-            Fit Lebar
-          </button>
-          <button
-            type="button"
-            onClick={() => setFitMode('100')}
-            className={`min-h-[32px] px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition ${
-              fitMode === '100'
-                ? 'bg-blue-900 text-white shadow-xs'
-                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
-            }`}
-          >
-            <ZoomIn className="w-3 h-3" />
-            100%
-          </button>
+        {/* Center Controls: Auto-Fit Mode + Perbesar/Perkecil Logo KOP */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Zoom / Auto-Fit Selector */}
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setFitMode('full')}
+              className={`min-h-[32px] px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition ${
+                fitMode === 'full'
+                  ? 'bg-blue-900 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+              }`}
+              title="Auto Fit 1 Halaman Penuh"
+            >
+              <Maximize2 className="w-3 h-3" />
+              Fit Full
+            </button>
+            <button
+              type="button"
+              onClick={() => setFitMode('width')}
+              className={`min-h-[32px] px-2.5 py-1 rounded-lg text-[11px] font-semibold transition ${
+                fitMode === 'width'
+                  ? 'bg-blue-900 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+              }`}
+            >
+              Fit Lebar
+            </button>
+            <button
+              type="button"
+              onClick={() => setFitMode('100')}
+              className={`min-h-[32px] px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1 transition ${
+                fitMode === '100'
+                  ? 'bg-blue-900 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+              }`}
+            >
+              <ZoomIn className="w-3 h-3" />
+              100%
+            </button>
+          </div>
+
+          {/* Direct Logo KOP Size Adjuster (Perbesar / Perkecil Logo di KOP) */}
+          <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-700 px-2.5 py-1 rounded-xl">
+            <span className="text-[11px] font-bold text-blue-900 dark:text-blue-300">
+              Ukuran Logo:
+            </span>
+            <button
+              type="button"
+              onClick={() => handleAdjustLogoScale(-10)}
+              className="w-7 h-7 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 active:scale-95"
+              title="Perkecil Logo KOP (-10%)"
+            >
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+            <input
+              type="range"
+              min={40}
+              max={220}
+              step={5}
+              value={logoScalePct}
+              onChange={(e) => handleSetLogoScale(Number(e.target.value))}
+              className="w-16 sm:w-20 accent-blue-900 cursor-pointer"
+              title="Geser untuk perbesar atau perkecil logo di KOP"
+            />
+            <button
+              type="button"
+              onClick={() => handleSetLogoScale(100)}
+              className="text-[11px] font-mono font-bold text-blue-900 dark:text-blue-300 min-w-[38px] text-center tabular-nums hover:underline"
+              title="Klik untuk reset ukuran logo ke 100%"
+            >
+              {logoScalePct}%
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAdjustLogoScale(10)}
+              className="w-7 h-7 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 active:scale-95"
+              title="Perbesar Logo KOP (+10%)"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Direct Logo KOP Position Adjuster (Atur Posisi Logo di KOP: Kiri/Kanan/Atas/Bawah + Drag) */}
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-1 rounded-xl">
+            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 mr-0.5">
+              <Move className="w-3 h-3 text-blue-800 dark:text-blue-400" />
+              Posisi Logo:
+            </span>
+            <button
+              type="button"
+              onClick={() => handleNudgeLogoPos(-4, 0)}
+              className="w-7 h-7 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 active:scale-95"
+              title="Geser Logo ke Kiri"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNudgeLogoPos(0, -4)}
+              className="w-7 h-7 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 active:scale-95"
+              title="Geser Logo ke Atas"
+            >
+              <ArrowUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNudgeLogoPos(0, 4)}
+              className="w-7 h-7 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 active:scale-95"
+              title="Geser Logo ke Bawah"
+            >
+              <ArrowDown className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNudgeLogoPos(4, 0)}
+              className="w-7 h-7 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100 active:scale-95"
+              title="Geser Logo ke Kanan"
+            >
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleResetLogoPos}
+              className="px-1.5 h-7 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 flex items-center gap-0.5"
+              title="Reset posisi logo ke ujung kiri garis (0, 0)"
+            >
+              <RotateCcw className="w-3 h-3" />
+              {logoX},{logoY}
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
@@ -276,7 +489,6 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
         ref={viewportRef}
         className="flex-1 overflow-auto p-3 flex items-start justify-center bg-slate-800/90 dark:bg-slate-950"
       >
-        {/* Outer sizing box that matches the scaled A4 dimensions so there is no dead whitespace */}
         <div
           style={{
             width: `${Math.round(A4_WIDTH_PX * scale)}px`,
@@ -295,49 +507,85 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
               fontFamily:
                 "'Carlito', Calibri, 'Plus Jakarta Sans', Arial, Helvetica, sans-serif",
             }}
-            className="bg-white text-slate-900 shadow-2xl border border-slate-300 px-[58px] py-[44px] text-[14px] leading-[1.48]"
+            className="bg-white text-slate-900 shadow-2xl border border-slate-300 px-[58px] py-[42px] text-[14px] leading-[1.48]"
           >
-            {/* KOP SURAT RESMI / PROFESSIONAL HEADER */}
-            <div className="flex items-center gap-5 pb-3">
-              {/* Left Logo Column */}
-              <div className="w-[150px] shrink-0 flex items-center justify-center">
+            {/* KOP SURAT RESMI (SESUAI GAMBAR REFERENSI: HEADER 1 TEBAL & BESAR, LOGO FIX DI KIRI GARIS) */}
+            <div
+              style={{
+                minHeight: `${Math.max(108, Math.round(64 * logoScaleFactor) + 16)}px`,
+              }}
+              className="relative pb-2.5 flex flex-col justify-end"
+            >
+              {/* LOGO: ANCHORED AT LEFT EDGE OF HORIZONTAL LINE + DRAGGABLE / ADJUSTABLE VIA (logoX, logoY) */}
+              <div
+                onPointerDown={handleLogoPointerDown}
+                onPointerMove={handleLogoPointerMove}
+                onPointerUp={handleLogoPointerUp}
+                style={{
+                  width: `${Math.round(166 * logoScaleFactor)}px`,
+                  height: `${Math.round(64 * logoScaleFactor)}px`,
+                  left: `${logoX}px`,
+                  bottom: `${9 - logoY}px`,
+                  touchAction: 'none',
+                }}
+                title="Sentuh & geser untuk mengatur posisi Logo di KOP"
+                className={`absolute z-20 flex items-end justify-start cursor-move select-none rounded-lg transition-shadow ${
+                  isDraggingLogo
+                    ? 'ring-2 ring-blue-600 bg-blue-50/30'
+                    : 'hover:ring-1 hover:ring-blue-400/70'
+                }`}
+              >
                 <img
                   src={logoSrc}
                   alt="Logo Perusahaan"
                   referrerPolicy="no-referrer"
-                  className="max-h-[86px] max-w-[148px] object-contain"
+                  draggable={false}
+                  className="w-full h-full object-contain object-left-bottom pointer-events-none"
                 />
               </div>
 
-              {/* Right/Center Kop Identity Column */}
-              <div className="flex-1 text-center pr-2">
-                <h1 className="text-[22px] font-bold tracking-[0.02em] text-[#2B4F71] uppercase leading-tight">
+              {/* CENTERED KOP TEXT BLOCK (Slightly offset right so it balances with left logo) */}
+              <div className="w-full pl-[74px] text-center">
+                {/* KOP HEADER 1: Dipertebal (Extra-Bold / Black) & Diperbesar sesuai gambar.png */}
+                <h1
+                  style={{
+                    fontFamily:
+                      "'Arial Black', 'Plus Jakarta Sans', Calibri, sans-serif",
+                    WebkitTextStroke: '0.85px #3B6E8C',
+                  }}
+                  className="text-[28px] font-black tracking-[0.03em] text-[#3B6E8C] uppercase leading-[1.12]"
+                >
                   {companyName}
                 </h1>
-                <div className="mt-1 space-y-0.5 text-[13px] text-slate-800 leading-[1.35]">
+
+                <div className="mt-1 space-y-0.5 text-[13.5px] font-medium text-slate-700 leading-[1.32]">
                   {balancedAddressLines.map((line, i) => (
                     <p key={i}>{line}</p>
                   ))}
                 </div>
+
                 {settings.email && (
-                  <p className="text-[13px] font-bold text-[#2B4F71] mt-0.5 leading-snug">
+                  <p className="text-[13.5px] font-bold text-slate-700 mt-0.5 leading-snug">
                     email.{' '}
-                    <span className="underline decoration-[#2B4F71] underline-offset-2">
+                    <span className="text-[#3B6E8C] underline decoration-[#3B6E8C] decoration-[1.5px] underline-offset-2">
                       {settings.email}
                     </span>
                   </p>
                 )}
+
                 {settings.telepon && (
-                  <p className="text-[13px] font-bold text-slate-900 mt-0.5 leading-snug">
+                  <p className="text-[13.5px] font-bold text-slate-800 mt-0.5 leading-snug">
                     Tlp {settings.telepon}
                   </p>
                 )}
               </div>
             </div>
 
-            {/* Official Double Horizontal Line (Garis Kop Surat) */}
-            <div className="border-t-[3px] border-slate-800 pt-[2px] mb-6">
-              <div className="border-t border-slate-800" />
+            {/* Compound Horizontal Kop Line (Garis Kop Surat Resmi sesuai gambar.png) */}
+            <div className="w-full mb-6">
+              <div className="border-t border-slate-700" />
+              <div className="border-t-[2.5px] border-slate-800 my-[1.5px]" />
+              <div className="border-t border-slate-700" />
             </div>
 
             {/* DOCUMENT TITLE */}

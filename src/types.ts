@@ -84,6 +84,9 @@ export interface AppSettings {
   telepon: string;
   email: string;
   logo: string;
+  logo_scale: number;
+  logo_x: number;
+  logo_y: number;
   stempel: string;
   stempel_scale: number;
   stempel_x: number;

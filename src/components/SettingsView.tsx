@@ -8,7 +8,9 @@ import {
   Link2,
   Loader2,
   LogOut,
+  Minus,
   Moon,
+  Plus,
   Save,
   Stamp,
   Sun,
@@ -17,6 +19,10 @@ import {
 } from 'lucide-react';
 import { changePasswordService } from '../services/authService';
 import { AppSettings, StempelTarget } from '../types';
+import {
+  formatKopAddressLines,
+  getCorporateEmblemDataUrl,
+} from '../utils/defaultLogo';
 import {
   compressImageFile,
   convertGoogleDriveUrl,
@@ -473,10 +479,171 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   className="max-h-24 max-w-full object-contain"
                 />
               ) : (
-                <p className="text-xs text-slate-400 text-center">
-                  Belum ada logo khusus. Upload file PNG/JPG untuk ditampilkan pada Kop Surat PDF.
-                </p>
+                <div className="flex flex-col items-center gap-1.5 text-center">
+                  <img
+                    src={getCorporateEmblemDataUrl(
+                      form.nama_perusahaan || 'CV.MULIA TEKHNIK ABADI'
+                    )}
+                    alt="Default Corporate Emblem"
+                    className="h-14 object-contain"
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Emblem otomatis aktif. Upload file PNG/JPG untuk menggunakan logo khusus.
+                  </p>
+                </div>
               )}
+            </div>
+
+            {/* Pengaturan Perbesar / Perkecil & Posisi Logo di KOP */}
+            <div className="pt-2 space-y-3 text-xs">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">
+                    Ukuran Logo di KOP ({form.logo_scale || 100}%)
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          logo_scale: Math.max(
+                            40,
+                            (form.logo_scale || 100) - 10
+                          ),
+                        })
+                      }
+                      className="w-7 h-7 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100"
+                      title="Perkecil Logo (-10%)"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          logo_scale: 100,
+                          logo_x: 0,
+                          logo_y: 0,
+                        })
+                      }
+                      className="px-2 h-7 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] font-mono font-bold text-blue-900 dark:text-blue-300 hover:bg-blue-50"
+                      title="Reset Ukuran (100%) & Posisi (0, 0)"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          logo_scale: Math.min(
+                            220,
+                            (form.logo_scale || 100) + 10
+                          ),
+                        })
+                      }
+                      className="w-7 h-7 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-100"
+                      title="Perbesar Logo (+10%)"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <input
+                  type="range"
+                  min={40}
+                  max={220}
+                  step={5}
+                  value={form.logo_scale || 100}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      logo_scale: Number(e.target.value) || 100,
+                    })
+                  }
+                  className="w-full accent-blue-900 cursor-pointer"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-slate-100 dark:border-slate-800">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-slate-600 dark:text-slate-400">
+                      Geser Kiri/Kanan X ({form.logo_x || 0})
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={-100}
+                      max={180}
+                      value={form.logo_x || 0}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          logo_x: Number(e.target.value) || 0,
+                        })
+                      }
+                      className="flex-1 accent-blue-900 cursor-pointer"
+                    />
+                    <input
+                      type="number"
+                      min={-150}
+                      max={220}
+                      value={form.logo_x || 0}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          logo_x: Number(e.target.value) || 0,
+                        })
+                      }
+                      className="w-14 min-h-[34px] px-1.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 font-mono text-center bg-white dark:bg-slate-950"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold text-slate-600 dark:text-slate-400">
+                      Geser Atas/Bawah Y ({form.logo_y || 0})
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min={-80}
+                      max={80}
+                      value={form.logo_y || 0}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          logo_y: Number(e.target.value) || 0,
+                        })
+                      }
+                      className="flex-1 accent-blue-900 cursor-pointer"
+                    />
+                    <input
+                      type="number"
+                      min={-120}
+                      max={120}
+                      value={form.logo_y || 0}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          logo_y: Number(e.target.value) || 0,
+                        })
+                      }
+                      className="w-14 min-h-[34px] px-1.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 font-mono text-center bg-white dark:bg-slate-950"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-500">
+                Posisi awal (0, 0) berada tepat di ujung kiri garis Kop. Geser slider X/Y di atas atau geser langsung logo pada layar VIEW PDF.
+              </p>
             </div>
           </div>
 
@@ -612,6 +779,100 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     />
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* LIVE PREVIEW KOP SURAT RESMI (SESUAI GAMBAR REFERENSI) */}
+        <div className="pt-2">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+              Pratinjau Langsung Kop Surat Resmi (Ukuran &amp; Posisi Logo KOP + Header 1 Tebal)
+            </span>
+            <span className="text-[11px] font-mono text-slate-500">
+              Skala: {form.logo_scale || 100}% · Posisi: ({form.logo_x || 0}, {form.logo_y || 0})
+            </span>
+          </div>
+          <div className="overflow-x-auto rounded-2xl border border-slate-300 bg-slate-100 dark:bg-slate-950 p-4">
+            <div
+              style={{
+                minWidth: '640px',
+                fontFamily:
+                  "'Carlito', Calibri, 'Plus Jakarta Sans', Arial, Helvetica, sans-serif",
+              }}
+              className="bg-white text-slate-900 rounded-xl shadow-xs border border-slate-200 px-8 py-5"
+            >
+              <div
+                style={{
+                  minHeight: `${Math.max(102, Math.round(58 * ((form.logo_scale || 100) / 100)) + 16)}px`,
+                }}
+                className="relative pb-2.5 flex flex-col justify-end"
+              >
+                {/* LOGO: ANCHORED AT LEFT EDGE OF THE HORIZONTAL LINE + USER OFFSET (logo_x, logo_y) */}
+                <div
+                  style={{
+                    width: `${Math.round(152 * ((form.logo_scale || 100) / 100))}px`,
+                    height: `${Math.round(58 * ((form.logo_scale || 100) / 100))}px`,
+                    left: `${form.logo_x || 0}px`,
+                    bottom: `${8 - (form.logo_y || 0)}px`,
+                  }}
+                  className="absolute z-10 flex items-end justify-start pointer-events-none"
+                >
+                  <img
+                    src={
+                      form.logo?.trim() ||
+                      getCorporateEmblemDataUrl(
+                        form.nama_perusahaan || 'CV.MULIA TEKHNIK ABADI'
+                      )
+                    }
+                    alt="Logo Kop"
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-contain object-left-bottom"
+                  />
+                </div>
+
+                {/* KOP HEADER 1 & ADDRESS */}
+                <div className="w-full pl-[68px] text-center">
+                  <h4
+                    style={{
+                      fontFamily:
+                        "'Arial Black', 'Plus Jakarta Sans', Calibri, sans-serif",
+                      WebkitTextStroke: '0.75px #3B6E8C',
+                    }}
+                    className="text-[24px] font-black tracking-[0.03em] text-[#3B6E8C] uppercase leading-[1.12]"
+                  >
+                    {form.nama_perusahaan || 'CV.MULIA TEKHNIK ABADI'}
+                  </h4>
+                  <div className="mt-1 space-y-0.5 text-[12.5px] font-medium text-slate-700 leading-[1.3]">
+                    {formatKopAddressLines(
+                      form.alamat ||
+                        'Jl. Letda Nasir No.58 Desa Cikeas Udik Kecamatan Gunung Putri Kab. Bogor Kode Pos 16966'
+                    ).map((line, idx) => (
+                      <p key={idx}>{line}</p>
+                    ))}
+                  </div>
+                  {form.email && (
+                    <p className="text-[12.5px] font-bold text-slate-700 mt-0.5 leading-snug">
+                      email.{' '}
+                      <span className="text-[#3B6E8C] underline decoration-[#3B6E8C] decoration-[1.5px] underline-offset-2">
+                        {form.email}
+                      </span>
+                    </p>
+                  )}
+                  {form.telepon && (
+                    <p className="text-[12.5px] font-bold text-slate-800 mt-0.5 leading-snug">
+                      Tlp {form.telepon}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Compound Horizontal Line */}
+              <div className="w-full">
+                <div className="border-t border-slate-700" />
+                <div className="border-t-[2.5px] border-slate-800 my-[1.5px]" />
+                <div className="border-t border-slate-700" />
               </div>
             </div>
           </div>

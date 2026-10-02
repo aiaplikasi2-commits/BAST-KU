@@ -170,7 +170,7 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'user_id', 'nama_perusahaan', 'alamat', 'kota', 'telepon', 'email',
-          'logo', 'stempel', 'stempel_scale', 'stempel_x', 'stempel_y', 'stempel_target',
+          'logo', 'logo_scale', 'logo_x', 'logo_y', 'stempel', 'stempel_scale', 'stempel_x', 'stempel_y', 'stempel_target',
           'signature_party_1', 'signature_party_2', 'app_icon',
           'auto_number_enabled', 'auto_number_format', 'auto_number_counter',
           'theme', 'default_pihak_kedua_nama', 'default_pihak_kedua_jabatan',
@@ -183,6 +183,9 @@ service cloud.firestore {
         && data.telepon is string && data.telepon.size() >= 0 && data.telepon.size() <= 100
         && data.email is string && data.email.size() >= 0 && data.email.size() <= 254
         && data.logo is string && data.logo.size() >= 0 && data.logo.size() <= 350000
+        && (!('logo_scale' in data) || (data.logo_scale is number && data.logo_scale >= 30 && data.logo_scale <= 250))
+        && (!('logo_x' in data) || (data.logo_x is number && data.logo_x >= -250 && data.logo_x <= 250))
+        && (!('logo_y' in data) || (data.logo_y is number && data.logo_y >= -250 && data.logo_y <= 250))
         && data.stempel is string && data.stempel.size() >= 0 && data.stempel.size() <= 350000
         && data.stempel_scale is number && data.stempel_scale >= 20 && data.stempel_scale <= 250
         && data.stempel_x is number && data.stempel_x >= -200 && data.stempel_x <= 200
@@ -344,7 +347,7 @@ service cloud.firestore {
         && incoming().updated_at == request.time
         && incoming().diff(existing()).affectedKeys().hasOnly([
           'nama_perusahaan', 'alamat', 'kota', 'telepon', 'email',
-          'logo', 'stempel', 'stempel_scale', 'stempel_x', 'stempel_y', 'stempel_target',
+          'logo', 'logo_scale', 'logo_x', 'logo_y', 'stempel', 'stempel_scale', 'stempel_x', 'stempel_y', 'stempel_target',
           'signature_party_1', 'signature_party_2', 'app_icon',
           'auto_number_enabled', 'auto_number_format', 'auto_number_counter',
           'theme', 'default_pihak_kedua_nama', 'default_pihak_kedua_jabatan',

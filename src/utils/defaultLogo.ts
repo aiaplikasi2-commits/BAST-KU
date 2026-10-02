@@ -1,12 +1,12 @@
 /**
- * Generates a high-resolution corporate swoosh emblem SVG Data URL (like the MTA logo)
- * when the user has not uploaded a custom logo image yet, and provides smart
- * Kop Surat address line balancing so addresses never wrap with awkward orphan words.
+ * Generates a high-resolution corporate swoosh emblem SVG Data URL (matching the MTA logo
+ * in gambar.png, flush-left with zero left margin so it sits fixed at the left edge of the Kop line)
+ * and provides smart Kop Surat address line balancing matching the official letterhead.
  */
 
 export function extractCompanyInitials(companyName: string): string {
   const cleaned = (companyName || 'CV. MULIA TEKHNIK ABADI')
-    .replace(/^(PT\.?|CV\.?|UD\.?|PD\.?|YAYASAN)\s+/i, '')
+    .replace(/^(PT\.?|CV\.?|UD\.?|PD\.?|YAYASAN)\s*/i, '')
     .trim();
 
   if (!cleaned) return 'MTA';
@@ -24,15 +24,16 @@ export function extractCompanyInitials(companyName: string): string {
 
 export function getCorporateEmblemDataUrl(companyName: string): string {
   const initials = extractCompanyInitials(companyName);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="170" viewBox="0 0 360 170" fill="none">
-    <!-- Outer Crescent Swoosh -->
-    <path d="M 320 85 C 320 34, 240 8, 145 8 C 52 8, 8 42, 8 85 C 8 128, 52 162, 145 162 C 240 162, 320 136, 320 85 Z" fill="#46698A" />
-    <!-- Inner White Cutout creating the thick left crescent and thin right rim -->
-    <path d="M 314 85 C 314 40, 246 16, 168 16 C 92 16, 48 45, 48 85 C 48 125, 92 154, 168 154 C 246 154, 314 130, 314 85 Z" fill="#FFFFFF" />
-    <!-- Secondary Inner Accent Arc -->
-    <path d="M 165 23 C 102 25, 62 50, 62 85 C 62 120, 102 145, 165 147 C 114 140, 80 116, 80 85 C 80 54, 114 30, 165 23 Z" fill="#46698A" opacity="0.92" />
-    <!-- Corporate Initials -->
-    <text x="192" y="106" text-anchor="middle" fill="#3B5D7C" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="64" letter-spacing="3">${initials}</text>
+  // Tight left-aligned viewBox (x=0 is the exact left tip of the crescent swoosh)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="330" height="115" viewBox="0 0 330 115" fill="none">
+    <!-- Outer Crescent Swoosh anchored flush left at x=0 -->
+    <path d="M 155 6 C 64 8, 0 31, 0 58 C 0 85, 64 108, 155 110 C 92 103, 46 83, 46 58 C 46 33, 92 13, 155 6 Z" fill="#466F8D" />
+    <!-- Subtle Top-Right Rim Arc -->
+    <path d="M 110 10 C 195 7, 268 23, 286 46 C 262 26, 194 13, 110 10 Z" fill="#466F8D" opacity="0.75" />
+    <!-- 3D Extruded Shadow Layer for Initials -->
+    <text x="179" y="80" text-anchor="middle" fill="none" stroke="#365873" stroke-width="2.5" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="64" letter-spacing="6" transform="scale(1.08, 0.92)">${initials}</text>
+    <!-- Primary Corporate Initials -->
+    <text x="174" y="77" text-anchor="middle" fill="#466F8D" stroke="#2C4C66" stroke-width="1.2" font-family="Georgia, 'Times New Roman', serif" font-weight="bold" font-size="64" letter-spacing="6" transform="scale(1.08, 0.92)">${initials}</text>
   </svg>`;
 
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
@@ -40,7 +41,9 @@ export function getCorporateEmblemDataUrl(companyName: string): string {
 
 /**
  * Splits a company address into neat, balanced lines for the Kop Surat
- * so that postal codes or short trailing words never hang alone on a new line.
+ * matching gambar.png:
+ * Line 1: Jl. Letda Nasir No.58 Desa Cikeas Udik
+ * Line 2: Kecamatan Gunung Putri Kab. Bogor Kode Pos 16966
  */
 export function formatKopAddressLines(rawAddress: string): string[] {
   const addr = (
@@ -58,29 +61,32 @@ export function formatKopAddressLines(rawAddress: string): string[] {
       .filter(Boolean);
   }
 
-  // Exact match or pattern match for Kab./Kota split (like "Kab. Bogor Kode Pos 16966")
+  // Match split right before "Kecamatan" / "Kec." (exact match to gambar.png)
+  const kecMatch = addr.match(/^(.*?)\s+((?:Kecamatan|Kec\.)\s+.*)$/i);
+  if (kecMatch && kecMatch[1].length >= 15 && kecMatch[2].length >= 15) {
+    return [kecMatch[1].trim(), kecMatch[2].trim()];
+  }
+
+  // Fallback pattern match for Kab./Kota split
   const kabMatch = addr.match(/^(.*?)\s+((?:Kab\.|Kabupaten|Kota)\s+.*)$/i);
-  if (kabMatch && kabMatch[1].length >= 25 && kabMatch[2].length >= 12) {
+  if (kabMatch && kabMatch[1].length >= 20 && kabMatch[2].length >= 12) {
     return [kabMatch[1].trim(), kabMatch[2].trim()];
   }
 
   // If short enough for 1 line, keep on 1 line
-  if (addr.length <= 58) {
+  if (addr.length <= 48) {
     return [addr];
   }
 
-  // Otherwise split cleanly near 58-65% of the string at a word boundary
+  // Otherwise split near 45-50% so top line is slightly shorter than second line (pyramid balance)
   const words = addr.split(/\s+/);
-  const targetLen = Math.round(addr.length * 0.62);
+  const targetLen = Math.round(addr.length * 0.46);
   const line1Words: string[] = [];
   const line2Words: string[] = [];
   let currentLen = 0;
 
   for (const w of words) {
-    if (
-      currentLen + w.length <= targetLen ||
-      line1Words.length < 3
-    ) {
+    if (currentLen + w.length <= targetLen || line1Words.length < 3) {
       line1Words.push(w);
       currentLen += w.length + 1;
     } else {

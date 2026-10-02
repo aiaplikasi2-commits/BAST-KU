@@ -55,10 +55,7 @@ export const AuthView: React.FC<AuthViewProps> = ({ customAppIcon }) => {
       code === 'auth/wrong-password' ||
       code === 'auth/user-not-found'
     ) {
-      return 'Email atau password yang Anda masukkan salah. Silakan periksa kembali.';
-    }
-    if (code === 'auth/email-already-in-use') {
-      return 'Alamat email ini sudah terdaftar. Silakan masuk menggunakan menu Login.';
+      return 'Email atau password yang Anda masukkan salah. Silakan periksa kembali atau gunakan menu Daftar Akun / Lupa Password.';
     }
     if (code === 'auth/weak-password') {
       return 'Password terlalu lemah. Gunakan minimal 6 karakter.';

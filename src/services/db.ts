@@ -86,6 +86,9 @@ export function getDefaultSettings(uid: string, userEmail = ''): AppSettings {
     telepon: '0812-1085-2489 / 0878-4062-0432',
     email: userEmail || 'cvmuliatekhnikabadi@gmail.com',
     logo: '',
+    logo_scale: 100,
+    logo_x: 0,
+    logo_y: 0,
     stempel: '',
     stempel_scale: 100,
     stempel_x: 0,
@@ -314,6 +317,9 @@ export async function ensureUserSettings(
         telepon: clampStr(initial.telepon, 100),
         email: clampStr(initial.email, 254),
         logo: clampRawStr(initial.logo, 350000),
+        logo_scale: clampNum(initial.logo_scale, 30, 250, 100),
+        logo_x: clampNum(initial.logo_x, -250, 250, 0),
+        logo_y: clampNum(initial.logo_y, -250, 250, 0),
         stempel: clampRawStr(initial.stempel, 350000),
         stempel_scale: clampNum(initial.stempel_scale, 20, 250, 100),
         stempel_x: clampNum(initial.stempel_x, -200, 200, 0),
@@ -362,6 +368,9 @@ export async function ensureUserSettings(
         telepon: String(d.telepon ?? defaults.telepon),
         email: String(d.email ?? defaults.email),
         logo: String(d.logo ?? ''),
+        logo_scale: clampNum(d.logo_scale, 30, 250, 100),
+        logo_x: clampNum(d.logo_x, -250, 250, 0),
+        logo_y: clampNum(d.logo_y, -250, 250, 0),
         stempel: String(d.stempel ?? ''),
         stempel_scale: clampNum(d.stempel_scale, 20, 250, 100),
         stempel_x: clampNum(d.stempel_x, -200, 200, 0),
@@ -425,6 +434,9 @@ export async function saveUserSettings(
     telepon: clampStr(settings.telepon, 100),
     email: clampStr(settings.email, 254),
     logo: clampRawStr(settings.logo, 350000),
+    logo_scale: clampNum(settings.logo_scale, 30, 250, 100),
+    logo_x: clampNum(settings.logo_x, -250, 250, 0),
+    logo_y: clampNum(settings.logo_y, -250, 250, 0),
     stempel: clampRawStr(settings.stempel, 350000),
     stempel_scale: clampNum(settings.stempel_scale, 20, 250, 100),
     stempel_x: clampNum(settings.stempel_x, -200, 200, 0),
@@ -985,6 +997,9 @@ export function subscribeUserData(
           telepon: String(d.telepon ?? defaults.telepon),
           email: String(d.email ?? defaults.email),
           logo: String(d.logo ?? ''),
+          logo_scale: clampNum(d.logo_scale, 30, 250, 100),
+          logo_x: clampNum(d.logo_x, -250, 250, 0),
+          logo_y: clampNum(d.logo_y, -250, 250, 0),
           stempel: String(d.stempel ?? ''),
           stempel_scale: clampNum(d.stempel_scale, 20, 250, 100),
           stempel_x: clampNum(d.stempel_x, -200, 200, 0),
@@ -1029,6 +1044,116 @@ export function subscribeUserData(
     unsubItems();
     unsubSettings();
   };
+}
+
+// ============================================================================
+// Initial Per-User Sample Data Seeding (Isolated by user_id)
+// ============================================================================
+export async function seedInitialSampleDataIfEmpty(uid: string): Promise<void> {
+  const safeUid = sanitizeId(uid);
+  const seededKey = `bast_seeded_v3_${safeUid}`;
+  if (localStorage.getItem(seededKey) === 'true') {
+    return;
+  }
+
+  try {
+    const existingBastSnap = await getDocs(
+      query(collection(db, 'bast_documents'), where('user_id', '==', safeUid))
+    );
+    if (!existingBastSnap.empty) {
+      localStorage.setItem(seededKey, 'true');
+      return;
+    }
+
+    const compId = ensureUserScopedId(safeUid, 'comp_sample_kansai', 'comp');
+    const bastId = ensureUserScopedId(safeUid, 'bast_sample_001', 'bast');
+
+    await saveCompanyRecord(
+      safeUid,
+      {
+        id: compId,
+        user_id: safeUid,
+        no: 1,
+        nama_pt: 'PT. KANSAI PAINT INDONESIA',
+        nama_pejabat: 'MUHAMAD RIDHO',
+        jabatan_pejabat: 'Perwakilan Perusahaan',
+        alamat:
+          'Blok DD-7 & DD-6 Kawasan Industri MM2100 Cikarang Barat Kab. Bekasi, 17847',
+        kota: 'Bekasi',
+        kode_pos: '17847',
+        telepon: '',
+        email: '',
+        logo: '',
+      },
+      false
+    );
+
+    await saveBastWithItems(
+      safeUid,
+      {
+        id: bastId,
+        user_id: safeUid,
+        nomor_bast: 'BAST/001/V/2025',
+        tanggal_bast: '2025-05-14',
+        kota: 'Bogor',
+        company_id: compId,
+        pihak_pertama_pt: 'PT. KANSAI PAINT INDONESIA',
+        pihak_pertama_nama: 'MUHAMAD RIDHO',
+        pihak_pertama_jabatan: '',
+        pihak_pertama_alamat:
+          'Blok DD-7 & DD-6 Kawasan Industri MM2100 Cikarang Barat Kab. Bekasi, 17847',
+        pihak_kedua_nama: 'MUHAMAD RIDHO',
+        pihak_kedua_jabatan: '',
+        pihak_kedua_alamat:
+          'Jln. Letda Nasir No. 58 Bogor, 16966 Kel. Cikeas Udik Kec. Gunung Putri Bogor',
+        nomor_po: 'KPIN-MIS-2503-035',
+        deskripsi_pekerjaan:
+          'Perbaikan Unit AC Floor Standing 10 PK Fuji Elektrik',
+        tanggal_mulai: '2025-05-14',
+        tanggal_selesai: '2025-05-14',
+        status: 'Selesai',
+        signature_party_1: '',
+        signature_party_2: '',
+        use_stempel: true,
+      },
+      [
+        {
+          id: ensureUserScopedId(safeUid, 'item_sample_1', 'item'),
+          nomor: 1,
+          nama_barang_jasa:
+            'Rewinding Motor Fan Outdoor AC Floor Standing 10 PK Fuji Elektrik',
+          keterangan: 'Sesuai',
+          urutan: 0,
+        },
+        {
+          id: ensureUserScopedId(safeUid, 'item_sample_2', 'item'),
+          nomor: 2,
+          nama_barang_jasa: 'Kapasitor Fan Outdoor 10uf mc',
+          keterangan: 'Sesuai',
+          urutan: 1,
+        },
+        {
+          id: ensureUserScopedId(safeUid, 'item_sample_3', 'item'),
+          nomor: 3,
+          nama_barang_jasa: 'Bearing Koyo Japan',
+          keterangan: 'Sesuai',
+          urutan: 2,
+        },
+        {
+          id: ensureUserScopedId(safeUid, 'item_sample_4', 'item'),
+          nomor: 4,
+          nama_barang_jasa: 'Jasa Perbaikan dan Bongkar Pasang',
+          keterangan: 'Sesuai',
+          urutan: 3,
+        },
+      ],
+      []
+    );
+
+    localStorage.setItem(seededKey, 'true');
+  } catch {
+    // Ignore seed error when offline
+  }
 }
 
 // ============================================================================

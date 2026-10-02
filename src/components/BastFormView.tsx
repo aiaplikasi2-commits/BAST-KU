@@ -130,6 +130,31 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
     existingBast?.tanggal_selesai || todayIso
   );
 
+  // Default 4 rows matching the official BAST reference
+  const getDefaultFourItems = (): EditableItem[] => [
+    {
+      id: generateSafeId('item'),
+      nama_barang_jasa:
+        'Rewinding Motor Fan Outdoor AC Floor Standing 10 PK Fuji Elektrik',
+      keterangan: 'Sesuai',
+    },
+    {
+      id: generateSafeId('item'),
+      nama_barang_jasa: 'Kapasitor Fan Outdoor 10uf mc',
+      keterangan: 'Sesuai',
+    },
+    {
+      id: generateSafeId('item'),
+      nama_barang_jasa: 'Bearing Koyo Japan',
+      keterangan: 'Sesuai',
+    },
+    {
+      id: generateSafeId('item'),
+      nama_barang_jasa: 'Jasa Perbaikan dan Bongkar Pasang',
+      keterangan: 'Sesuai',
+    },
+  ];
+
   // Items
   const [items, setItems] = useState<EditableItem[]>(() => {
     if (existingItems.length > 0) {
@@ -141,14 +166,23 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
           keterangan: it.keterangan || 'Sesuai',
         }));
     }
-    return [
-      {
-        id: generateSafeId('item'),
-        nama_barang_jasa: '',
-        keterangan: 'Sesuai',
-      },
-    ];
+    return getDefaultFourItems();
   });
+
+  // Sync items if existingItems loads asynchronously when editing an existing BAST
+  useEffect(() => {
+    if (existingItems.length > 0) {
+      setItems(
+        [...existingItems]
+          .sort((a, b) => a.urutan - b.urutan || a.nomor - b.nomor)
+          .map((it) => ({
+            id: it.id,
+            nama_barang_jasa: it.nama_barang_jasa,
+            keterangan: it.keterangan || 'Sesuai',
+          }))
+      );
+    }
+  }, [existingBast?.id, existingItems.length]);
 
   // Signatures & Stamp
   const [signatureParty1, setSignatureParty1] = useState<string>(
@@ -261,26 +295,14 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
   };
 
   const handleLoadExampleItems = () => {
+    setItems(getDefaultFourItems());
+  };
+
+  const handleResetToSingleEmptyRow = () => {
     setItems([
       {
         id: generateSafeId('item'),
-        nama_barang_jasa:
-          'Rewinding Motor Fan Outdoor AC Floor Standing 10 PK Fuji Elektrik',
-        keterangan: 'Sesuai',
-      },
-      {
-        id: generateSafeId('item'),
-        nama_barang_jasa: 'Kapasitor Fan Outdoor 10uf mc',
-        keterangan: 'Sesuai',
-      },
-      {
-        id: generateSafeId('item'),
-        nama_barang_jasa: 'Bearing Koyo Japan',
-        keterangan: 'Sesuai',
-      },
-      {
-        id: generateSafeId('item'),
-        nama_barang_jasa: 'Jasa Perbaikan dan Bongkar Pasang',
+        nama_barang_jasa: '',
         keterangan: 'Sesuai',
       },
     ]);
@@ -403,12 +425,6 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
 
   const handleOpenPreview = () => {
     setErrorMsg(null);
-    const validationErr = validateForm(status);
-    if (validationErr) {
-      setErrorMsg(validationErr);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
     setShowPreview(true);
   };
 
@@ -772,24 +788,34 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
       <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
           <div>
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-              E. Rincian Barang / Jasa ({items.length} Baris)
-            </h2>
-            <p className="text-xs text-slate-500">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+                E. Rincian Barang / Jasa
+              </h2>
+              <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-700 text-[11px] font-mono font-bold text-blue-900 dark:text-blue-300">
+                {items.length} Baris
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
               Tambah, edit, hapus, atau ubah urutan baris rincian pekerjaan
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            {items.length === 1 && !items[0].nama_barang_jasa && (
-              <button
-                type="button"
-                onClick={handleLoadExampleItems}
-                className="min-h-[40px] px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50"
-              >
-                Isi Contoh Rincian AC
-              </button>
-            )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleLoadExampleItems}
+              className="min-h-[40px] px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50"
+            >
+              Isi Default (4 Baris)
+            </button>
+            <button
+              type="button"
+              onClick={handleResetToSingleEmptyRow}
+              className="min-h-[40px] px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 hover:bg-slate-50"
+            >
+              Kosongkan
+            </button>
             <button
               type="button"
               onClick={handleAddItem}

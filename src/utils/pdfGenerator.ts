@@ -24,8 +24,8 @@ async function prepareImageForPdf(
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
-        const w = (img.naturalWidth || img.width || 360) * 2;
-        const h = (img.naturalHeight || img.height || 170) * 2;
+        const w = (img.naturalWidth || img.width || 330) * 2;
+        const h = (img.naturalHeight || img.height || 115) * 2;
         const canvas = document.createElement('canvas');
         canvas.width = w;
         canvas.height = h;
@@ -52,14 +52,11 @@ async function prepareImageForPdf(
 
 /**
  * Generates an official A4 Portrait PDF for a BAST document.
- * Styled after the corporate BAST reference (CV. MULIA TEKHNIK ABADI) with:
- * - Official Kop Surat (Logo + Balanced Company Identity + Double Horizontal Line)
- * - Centered bold underlined title "BERITA ACARA SERAH TERIMA" + Nomor BAST
- * - Opening paragraph with automatic Indonesian Terbilang date
- * - Aligned Pihak Pertama & Pihak Kedua blocks
- * - PO statement & bordered AutoTable with repeating headers across pages
- * - Closing completion & handover statements
- * - Dual Signature blocks + configurable Stamp (Stempel) placement
+ * Styled after the corporate BAST reference (gambar.png - CV. MULIA TEKHNIK ABADI):
+ * - Extra-bold, large Header 1 company name in steel blue (#3B6E8C)
+ * - Logo FIXED at the left edge of the horizontal Kop line (marginX), scalable via logo_scale
+ * - Balanced 2-line address, underlined email, bold phone number
+ * - Formal compound horizontal Kop rule (Garis Kop)
  */
 export async function generateBastPdfDocument(
   bast: BastDocument,
@@ -80,10 +77,10 @@ export async function generateBastPdfDocument(
   let cursorY = 14;
 
   // ---------------------------------------------------------------------------
-  // 1. HEADER / KOP SURAT (RAPIH & PROFESIONAL)
+  // 1. HEADER / KOP SURAT (SESUAI GAMBAR REFERENSI)
   // ---------------------------------------------------------------------------
   const companyName =
-    settings.nama_perusahaan?.trim() || 'CV. MULIA TEKHNIK ABADI';
+    settings.nama_perusahaan?.trim() || 'CV.MULIA TEKHNIK ABADI';
   const companyAddress =
     settings.alamat?.trim() ||
     'Jl. Letda Nasir No.58 Desa Cikeas Udik Kecamatan Gunung Putri Kab. Bogor Kode Pos 16966';
@@ -94,99 +91,127 @@ export async function generateBastPdfDocument(
     settings.logo?.trim() || getCorporateEmblemDataUrl(companyName);
   const preparedLogo = await prepareImageForPdf(logoSrc);
 
-  // Left Logo Box (width: 38mm, vertically centered with Kop text block)
-  const logoBoxWidth = 38;
-  const logoBoxHeight = 23;
-  if (preparedLogo) {
-    const ratio = Math.min(
-      logoBoxWidth / preparedLogo.width,
-      logoBoxHeight / preparedLogo.height
-    );
-    const drawW = preparedLogo.width * ratio;
-    const drawH = preparedLogo.height * ratio;
-    doc.addImage(
-      preparedLogo.dataUrl,
-      'PNG',
-      marginX + (logoBoxWidth - drawW) / 2,
-      cursorY + (logoBoxHeight - drawH) / 2 + 0.5,
-      drawW,
-      drawH
-    );
-  }
+  // Center X of the Kop text block (slightly right of page center so large title & address sit harmoniously with left logo)
+  const headerCenterX = pageWidth / 2 + 10; // 115mm
+  const maxTextWidth = 136;
 
-  // Right/Center Kop Text Column (x = 60mm to 190mm -> center at 125mm)
-  const textAreaLeft = marginX + logoBoxWidth + 3; // 61mm
-  const textAreaWidth = pageWidth - marginX - textAreaLeft; // 129mm
-  const headerCenterX = textAreaLeft + textAreaWidth / 2; // 125.5mm
-
-  // Company Name
+  // KOP HEADER 1: Extra-Bold & Larger (simulating heavy/black font weight like Arial Black in gambar.png)
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15.5);
-  doc.setTextColor(43, 79, 113); // Corporate Steel Navy (#2B4F71)
-  doc.text(companyName.toUpperCase(), headerCenterX, cursorY + 5.2, {
-    align: 'center',
-  });
+  doc.setFontSize(21);
+  doc.setTextColor(59, 110, 140); // #3B6E8C matches gambar.png
+  const upperCompanyName = companyName.toUpperCase();
+  const titleY = cursorY + 6;
+  // Multi-pass micro-offset to achieve ExtraBold / Heavy weight like Arial Black in gambar.png
+  doc.text(upperCompanyName, headerCenterX, titleY, { align: 'center' });
+  doc.text(upperCompanyName, headerCenterX + 0.22, titleY, { align: 'center' });
+  doc.text(upperCompanyName, headerCenterX - 0.22, titleY, { align: 'center' });
+  doc.text(upperCompanyName, headerCenterX, titleY + 0.15, { align: 'center' });
+  doc.text(upperCompanyName, headerCenterX, titleY - 0.12, { align: 'center' });
 
   // Balanced Address Lines
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  doc.setTextColor(30, 41, 59);
+  doc.setFontSize(10);
+  doc.setTextColor(51, 65, 85);
   const rawBalancedLines = formatKopAddressLines(companyAddress);
-  let headerLineY = cursorY + 10.4;
+  let headerLineY = titleY + 5.8;
 
   for (const rawLine of rawBalancedLines) {
-    const wrapped = doc.splitTextToSize(rawLine, textAreaWidth - 2);
+    const wrapped = doc.splitTextToSize(rawLine, maxTextWidth);
     for (const subLine of wrapped) {
       doc.text(subLine, headerCenterX, headerLineY, { align: 'center' });
-      headerLineY += 4.3;
+      headerLineY += 4.4;
     }
   }
 
   // Email Line with underlined email address
   if (companyEmail) {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
+    doc.setFontSize(10);
     const prefixStr = 'email. ';
     const fullEmailLine = `${prefixStr}${companyEmail}`;
     const fullW = doc.getTextWidth(fullEmailLine);
     const prefixW = doc.getTextWidth(prefixStr);
     const startX = headerCenterX - fullW / 2;
 
-    doc.setTextColor(43, 79, 113);
+    doc.setTextColor(60, 72, 88);
     doc.text(prefixStr, startX, headerLineY);
+
+    doc.setTextColor(59, 110, 140);
     doc.text(companyEmail, startX + prefixW, headerLineY);
 
-    // Draw underline specifically beneath the email address
-    doc.setDrawColor(43, 79, 113);
-    doc.setLineWidth(0.28);
+    // Underline specifically beneath the email address
+    doc.setDrawColor(59, 110, 140);
+    doc.setLineWidth(0.32);
     doc.line(
       startX + prefixW,
-      headerLineY + 0.7,
+      headerLineY + 0.75,
       startX + fullW,
-      headerLineY + 0.7
+      headerLineY + 0.75
     );
-    headerLineY += 4.4;
+    headerLineY += 4.5;
   }
 
   // Phone Line
   if (companyPhone) {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.setTextColor(30, 41, 59);
+    doc.setFontSize(10);
+    doc.setTextColor(51, 65, 85);
     doc.text(`Tlp ${companyPhone}`, headerCenterX, headerLineY, {
       align: 'center',
     });
     headerLineY += 4.2;
   }
 
-  cursorY = Math.max(cursorY + 25, headerLineY + 1.5);
+  // Compute scaled Logo dimensions (Perbesar / Perkecil Logo di KOP)
+  let drawLogoW = 0;
+  let drawLogoH = 0;
+  if (preparedLogo) {
+    const logoScale = Math.max(
+      0.4,
+      Math.min(2.2, (settings.logo_scale || 100) / 100)
+    );
+    const baseMaxW = 44 * logoScale;
+    const baseMaxH = 18 * logoScale;
+    const ratio = Math.min(
+      baseMaxW / preparedLogo.width,
+      baseMaxH / preparedLogo.height
+    );
+    drawLogoW = preparedLogo.width * ratio;
+    drawLogoH = preparedLogo.height * ratio;
+  }
 
-  // Double Horizontal Line (Garis Kop Surat Resmi)
-  doc.setDrawColor(45, 55, 72);
-  doc.setLineWidth(0.85);
+  const lineY = Math.max(
+    cursorY + 27.5,
+    headerLineY + 1.6,
+    cursorY + drawLogoH + 3
+  );
+
+  // Draw Logo anchored at the left edge of the horizontal Kop line (x = marginX) + user's custom (logo_x, logo_y) position offset
+  if (preparedLogo && drawLogoW > 0 && drawLogoH > 0) {
+    const offsetXmm = (settings.logo_x || 0) * 0.265;
+    const offsetYmm = (settings.logo_y || 0) * 0.265;
+    const logoX = Math.max(2, Math.min(pageWidth - drawLogoW - 2, marginX + offsetXmm));
+    const logoY = Math.max(2, lineY - drawLogoH - 2.2 + offsetYmm);
+    doc.addImage(
+      preparedLogo.dataUrl,
+      'PNG',
+      logoX,
+      logoY,
+      drawLogoW,
+      drawLogoH
+    );
+  }
+
+  cursorY = lineY;
+
+  // Compound Horizontal Line (Garis Kop Surat Resmi sesuai gambar.png)
+  doc.setDrawColor(65, 75, 88);
+  doc.setLineWidth(0.25);
   doc.line(marginX, cursorY, pageWidth - marginX, cursorY);
-  doc.setLineWidth(0.3);
-  doc.line(marginX, cursorY + 1.2, pageWidth - marginX, cursorY + 1.2);
+  doc.setLineWidth(0.75);
+  doc.line(marginX, cursorY + 0.85, pageWidth - marginX, cursorY + 0.85);
+  doc.setLineWidth(0.25);
+  doc.line(marginX, cursorY + 1.7, pageWidth - marginX, cursorY + 1.7);
 
   cursorY += 8.5;
 

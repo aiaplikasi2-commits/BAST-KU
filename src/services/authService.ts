@@ -426,12 +426,6 @@ export async function registerWithEmailAndPasswordService(
   const accounts = loadStoredAccounts();
   const cloudExisting = await fetchCloudAccount(uid);
 
-  if (cloudExisting || accounts[cleanEmail]) {
-    throw new Error(
-      'Alamat email ini sudah terdaftar. Silakan masuk menggunakan menu Login.'
-    );
-  }
-
   // 1. Try Firebase Auth first
   try {
     const cred = await createUserWithEmailAndPassword(
@@ -455,12 +449,10 @@ export async function registerWithEmailAndPasswordService(
       typeof err === 'object' && err !== null && 'code' in err
         ? String((err as { code: string }).code)
         : '';
-    if (code === 'auth/email-already-in-use') {
-      throw new Error(
-        'Alamat email ini sudah terdaftar. Silakan masuk menggunakan menu Login.'
-      );
-    }
-    if (code !== 'auth/operation-not-allowed') {
+    if (
+      code !== 'auth/operation-not-allowed' &&
+      code !== 'auth/email-already-in-use'
+    ) {
       throw err;
     }
   }
@@ -469,7 +461,7 @@ export async function registerWithEmailAndPasswordService(
     await signOut(auth);
   }
 
-  // 2. Register in Cloud Firestore + PBKDF2-SHA256
+  // 2. Register or Update Account in Cloud Firestore + PBKDF2-SHA256 seamlessly
   const saltHex = generateSaltHex();
   const hashHex = await derivePasswordHash(passwordInput, saltHex);
   const now = new Date().toISOString();
@@ -480,13 +472,13 @@ export async function registerWithEmailAndPasswordService(
     displayName: cleanName,
     saltHex,
     hashHex,
-    createdAt: now,
+    createdAt: cloudExisting?.createdAt || accounts[cleanEmail]?.createdAt || now,
     updatedAt: now,
   };
 
   accounts[cleanEmail] = newRecord;
   saveStoredAccounts(accounts);
-  await saveCloudAccount(newRecord, false);
+  await saveCloudAccount(newRecord, Boolean(cloudExisting));
 
   const active: ActiveAuthUser = {
     uid,

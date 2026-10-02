@@ -42,6 +42,7 @@ import {
   saveBastWithItems,
   saveCompanyRecord,
   saveUserSettings,
+  seedInitialSampleDataIfEmpty,
   subscribeUserData,
   updateUserProfileName,
 } from './services/db';
@@ -119,6 +120,7 @@ export default function App() {
             user.uid,
             user.email || ''
           );
+          await seedInitialSampleDataIfEmpty(user.uid);
           if (!isCancelled) {
             setSettings(loadedSettings);
             setSyncStatus(navigator.onLine ? 'synced' : 'offline');

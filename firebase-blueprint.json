@@ -323,6 +323,15 @@
         "logo": {
           "type": "string"
         },
+        "logo_scale": {
+          "type": "number"
+        },
+        "logo_x": {
+          "type": "number"
+        },
+        "logo_y": {
+          "type": "number"
+        },
         "stempel": {
           "type": "string"
         },
