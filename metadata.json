@@ -1,0 +1,6 @@
+{
+  "name": "BAST - Berita Acara Serah Terima",
+  "description": "Aplikasi pembuatan, pengelolaan, dan pencetakan dokumen Berita Acara Serah Terima (BAST) profesional berbasis Android PWA dan Cloud.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

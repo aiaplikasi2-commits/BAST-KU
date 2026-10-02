@@ -1,0 +1,356 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Global Hardened Primitives
+    // =========================================================================
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isPbkdf2UserId(id) {
+      return id is string && id.size() == 20 && id.matches('^usr_[a-f0-9]{16}$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAuthorizedOwner(userId) {
+      return isValidId(userId) && (
+        (isSignedIn() && userId == request.auth.uid)
+        || (!isSignedIn() && isPbkdf2UserId(userId))
+      );
+    }
+
+    // =========================================================================
+    // Validation Blueprints (Anti-Update-Gap)
+    // =========================================================================
+    function isValidAuthAccount(data) {
+      return data.keys().hasAll([
+          'id', 'uid', 'email', 'displayName', 'saltHex', 'hashHex',
+          'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'id', 'uid', 'email', 'displayName', 'saltHex', 'hashHex',
+          'created_at', 'updated_at'
+        ])
+        && isPbkdf2UserId(data.id)
+        && data.uid == data.id
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 150
+        && data.saltHex is string && data.saltHex.size() >= 16 && data.saltHex.size() <= 128
+        && data.hashHex is string && data.hashHex.size() >= 32 && data.hashHex.size() <= 128
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'email', 'name', 'created_at', 'updated_at'])
+        && data.keys().hasOnly(['id', 'email', 'name', 'created_at', 'updated_at'])
+        && isAuthorizedOwner(data.id)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 150
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidCompany(data) {
+      return data.keys().hasAll([
+          'id', 'user_id', 'no', 'nama_pt', 'nama_pejabat', 'jabatan_pejabat',
+          'alamat', 'kota', 'kode_pos', 'telepon', 'email', 'logo',
+          'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'id', 'user_id', 'no', 'nama_pt', 'nama_pejabat', 'jabatan_pejabat',
+          'alamat', 'kota', 'kode_pos', 'telepon', 'email', 'logo',
+          'created_at', 'updated_at'
+        ])
+        && isValidId(data.id)
+        && isAuthorizedOwner(data.user_id)
+        && data.no is number && data.no >= 0 && data.no <= 1000000
+        && data.nama_pt is string && data.nama_pt.size() >= 1 && data.nama_pt.size() <= 200
+        && data.nama_pejabat is string && data.nama_pejabat.size() >= 1 && data.nama_pejabat.size() <= 150
+        && data.jabatan_pejabat is string && data.jabatan_pejabat.size() >= 0 && data.jabatan_pejabat.size() <= 150
+        && data.alamat is string && data.alamat.size() >= 0 && data.alamat.size() <= 1000
+        && data.kota is string && data.kota.size() >= 0 && data.kota.size() <= 100
+        && data.kode_pos is string && data.kode_pos.size() >= 0 && data.kode_pos.size() <= 20
+        && data.telepon is string && data.telepon.size() >= 0 && data.telepon.size() <= 100
+        && data.email is string && data.email.size() >= 0 && data.email.size() <= 254
+        && data.logo is string && data.logo.size() >= 0 && data.logo.size() <= 350000
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidBastDocument(data) {
+      return data.keys().hasAll([
+          'id', 'user_id', 'nomor_bast', 'tanggal_bast', 'kota', 'company_id',
+          'pihak_pertama_pt', 'pihak_pertama_nama', 'pihak_pertama_jabatan', 'pihak_pertama_alamat',
+          'pihak_kedua_nama', 'pihak_kedua_jabatan', 'pihak_kedua_alamat',
+          'nomor_po', 'deskripsi_pekerjaan', 'tanggal_mulai', 'tanggal_selesai',
+          'status', 'signature_party_1', 'signature_party_2', 'use_stempel',
+          'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'id', 'user_id', 'nomor_bast', 'tanggal_bast', 'kota', 'company_id',
+          'pihak_pertama_pt', 'pihak_pertama_nama', 'pihak_pertama_jabatan', 'pihak_pertama_alamat',
+          'pihak_kedua_nama', 'pihak_kedua_jabatan', 'pihak_kedua_alamat',
+          'nomor_po', 'deskripsi_pekerjaan', 'tanggal_mulai', 'tanggal_selesai',
+          'status', 'signature_party_1', 'signature_party_2', 'use_stempel',
+          'created_at', 'updated_at'
+        ])
+        && isValidId(data.id)
+        && isAuthorizedOwner(data.user_id)
+        && data.nomor_bast is string && data.nomor_bast.size() >= 1 && data.nomor_bast.size() <= 150
+        && data.tanggal_bast is string && data.tanggal_bast.size() >= 1 && data.tanggal_bast.size() <= 30
+        && data.kota is string && data.kota.size() >= 1 && data.kota.size() <= 100
+        && data.company_id is string && data.company_id.size() >= 0 && data.company_id.size() <= 128
+        && (data.company_id.size() == 0 || isValidId(data.company_id))
+        && data.pihak_pertama_pt is string && data.pihak_pertama_pt.size() >= 1 && data.pihak_pertama_pt.size() <= 200
+        && data.pihak_pertama_nama is string && data.pihak_pertama_nama.size() >= 1 && data.pihak_pertama_nama.size() <= 150
+        && data.pihak_pertama_jabatan is string && data.pihak_pertama_jabatan.size() >= 0 && data.pihak_pertama_jabatan.size() <= 150
+        && data.pihak_pertama_alamat is string && data.pihak_pertama_alamat.size() >= 1 && data.pihak_pertama_alamat.size() <= 1000
+        && data.pihak_kedua_nama is string && data.pihak_kedua_nama.size() >= 1 && data.pihak_kedua_nama.size() <= 150
+        && data.pihak_kedua_jabatan is string && data.pihak_kedua_jabatan.size() >= 0 && data.pihak_kedua_jabatan.size() <= 150
+        && data.pihak_kedua_alamat is string && data.pihak_kedua_alamat.size() >= 1 && data.pihak_kedua_alamat.size() <= 1000
+        && data.nomor_po is string && data.nomor_po.size() >= 0 && data.nomor_po.size() <= 150
+        && data.deskripsi_pekerjaan is string && data.deskripsi_pekerjaan.size() >= 0 && data.deskripsi_pekerjaan.size() <= 1000
+        && data.tanggal_mulai is string && data.tanggal_mulai.size() >= 1 && data.tanggal_mulai.size() <= 30
+        && data.tanggal_selesai is string && data.tanggal_selesai.size() >= 1 && data.tanggal_selesai.size() <= 30
+        && data.status is string && (data.status == 'Draft' || data.status == 'Selesai')
+        && data.signature_party_1 is string && data.signature_party_1.size() >= 0 && data.signature_party_1.size() <= 250000
+        && data.signature_party_2 is string && data.signature_party_2.size() >= 0 && data.signature_party_2.size() <= 250000
+        && data.use_stempel is bool
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidBastItem(data) {
+      return data.keys().hasAll([
+          'id', 'user_id', 'bast_id', 'nomor', 'nama_barang_jasa',
+          'keterangan', 'urutan', 'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'id', 'user_id', 'bast_id', 'nomor', 'nama_barang_jasa',
+          'keterangan', 'urutan', 'created_at', 'updated_at'
+        ])
+        && isValidId(data.id)
+        && isAuthorizedOwner(data.user_id)
+        && isValidId(data.bast_id)
+        && data.nomor is number && data.nomor >= 1 && data.nomor <= 10000
+        && data.nama_barang_jasa is string && data.nama_barang_jasa.size() >= 1 && data.nama_barang_jasa.size() <= 1000
+        && data.keterangan is string && data.keterangan.size() >= 1 && data.keterangan.size() <= 500
+        && data.urutan is number && data.urutan >= 0 && data.urutan <= 10000
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function isValidSettings(data) {
+      return data.keys().hasAll([
+          'user_id', 'nama_perusahaan', 'alamat', 'kota', 'telepon', 'email',
+          'logo', 'stempel', 'stempel_scale', 'stempel_x', 'stempel_y', 'stempel_target',
+          'signature_party_1', 'signature_party_2', 'app_icon',
+          'auto_number_enabled', 'auto_number_format', 'auto_number_counter',
+          'theme', 'default_pihak_kedua_nama', 'default_pihak_kedua_jabatan',
+          'default_pihak_kedua_alamat', 'created_at', 'updated_at'
+        ])
+        && data.keys().hasOnly([
+          'user_id', 'nama_perusahaan', 'alamat', 'kota', 'telepon', 'email',
+          'logo', 'stempel', 'stempel_scale', 'stempel_x', 'stempel_y', 'stempel_target',
+          'signature_party_1', 'signature_party_2', 'app_icon',
+          'auto_number_enabled', 'auto_number_format', 'auto_number_counter',
+          'theme', 'default_pihak_kedua_nama', 'default_pihak_kedua_jabatan',
+          'default_pihak_kedua_alamat', 'created_at', 'updated_at'
+        ])
+        && isAuthorizedOwner(data.user_id)
+        && data.nama_perusahaan is string && data.nama_perusahaan.size() >= 0 && data.nama_perusahaan.size() <= 200
+        && data.alamat is string && data.alamat.size() >= 0 && data.alamat.size() <= 1000
+        && data.kota is string && data.kota.size() >= 0 && data.kota.size() <= 100
+        && data.telepon is string && data.telepon.size() >= 0 && data.telepon.size() <= 100
+        && data.email is string && data.email.size() >= 0 && data.email.size() <= 254
+        && data.logo is string && data.logo.size() >= 0 && data.logo.size() <= 350000
+        && data.stempel is string && data.stempel.size() >= 0 && data.stempel.size() <= 350000
+        && data.stempel_scale is number && data.stempel_scale >= 20 && data.stempel_scale <= 250
+        && data.stempel_x is number && data.stempel_x >= -200 && data.stempel_x <= 200
+        && data.stempel_y is number && data.stempel_y >= -200 && data.stempel_y <= 200
+        && data.stempel_target is string && (data.stempel_target == 'pihak_kedua' || data.stempel_target == 'pihak_pertama' || data.stempel_target == 'both')
+        && data.signature_party_1 is string && data.signature_party_1.size() >= 0 && data.signature_party_1.size() <= 250000
+        && data.signature_party_2 is string && data.signature_party_2.size() >= 0 && data.signature_party_2.size() <= 250000
+        && data.app_icon is string && data.app_icon.size() >= 0 && data.app_icon.size() <= 250000
+        && data.auto_number_enabled is bool
+        && data.auto_number_format is string && data.auto_number_format.size() >= 1 && data.auto_number_format.size() <= 100
+        && data.auto_number_counter is number && data.auto_number_counter >= 0 && data.auto_number_counter <= 1000000
+        && data.theme is string && (data.theme == 'light' || data.theme == 'dark')
+        && data.default_pihak_kedua_nama is string && data.default_pihak_kedua_nama.size() >= 0 && data.default_pihak_kedua_nama.size() <= 150
+        && data.default_pihak_kedua_jabatan is string && data.default_pihak_kedua_jabatan.size() >= 0 && data.default_pihak_kedua_jabatan.size() <= 150
+        && data.default_pihak_kedua_alamat is string && data.default_pihak_kedua_alamat.size() >= 0 && data.default_pihak_kedua_alamat.size() <= 1000
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    // =========================================================================
+    // Collection Rules
+    // =========================================================================
+
+    match /auth_accounts/{accountId} {
+      allow get: if isPbkdf2UserId(accountId);
+      allow list: if false;
+      allow create: if isPbkdf2UserId(accountId)
+        && isValidAuthAccount(incoming())
+        && incoming().id == accountId
+        && incoming().created_at == request.time
+        && incoming().updated_at == request.time;
+      allow update: if isPbkdf2UserId(accountId)
+        && isValidAuthAccount(incoming())
+        && incoming().id == existing().id
+        && incoming().uid == existing().uid
+        && incoming().email == existing().email
+        && incoming().created_at == existing().created_at
+        && incoming().updated_at == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'saltHex', 'hashHex', 'updated_at'
+        ]);
+      allow delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isAuthorizedOwner(userId);
+      allow list: if false;
+      allow create: if isAuthorizedOwner(userId)
+        && isValidUser(incoming())
+        && incoming().id == userId
+        && incoming().created_at == request.time
+        && incoming().updated_at == request.time;
+      allow update: if isAuthorizedOwner(userId)
+        && isValidUser(incoming())
+        && isAuthorizedOwner(existing().id)
+        && incoming().id == existing().id
+        && incoming().created_at == existing().created_at
+        && incoming().updated_at == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'updated_at']);
+      allow delete: if false;
+    }
+
+    match /companies/{companyId} {
+      allow get: if isValidId(companyId) && isAuthorizedOwner(existing().user_id);
+      allow list: if isAuthorizedOwner(existing().user_id);
+      allow create: if isValidId(companyId)
+        && isValidCompany(incoming())
+        && incoming().id == companyId
+        && incoming().created_at == request.time
+        && incoming().updated_at == request.time;
+      allow update: if isValidId(companyId)
+        && isValidCompany(incoming())
+        && isAuthorizedOwner(existing().user_id)
+        && incoming().id == existing().id
+        && incoming().user_id == existing().user_id
+        && incoming().created_at == existing().created_at
+        && incoming().updated_at == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'no', 'nama_pt', 'nama_pejabat', 'jabatan_pejabat',
+          'alamat', 'kota', 'kode_pos', 'telepon', 'email', 'logo', 'updated_at'
+        ]);
+      allow delete: if isValidId(companyId) && isAuthorizedOwner(existing().user_id);
+    }
+
+    match /bast_documents/{bastId} {
+      allow get: if isValidId(bastId) && isAuthorizedOwner(existing().user_id);
+      allow list: if isAuthorizedOwner(existing().user_id);
+      allow create: if isValidId(bastId)
+        && isValidBastDocument(incoming())
+        && incoming().id == bastId
+        && incoming().created_at == request.time
+        && incoming().updated_at == request.time
+        && (incoming().company_id.size() == 0 || (
+          exists(/databases/$(database)/documents/companies/$(incoming().company_id))
+          && get(/databases/$(database)/documents/companies/$(incoming().company_id)).data.user_id == incoming().user_id
+        ));
+      allow update: if isValidId(bastId)
+        && isValidBastDocument(incoming())
+        && isAuthorizedOwner(existing().user_id)
+        && incoming().id == existing().id
+        && incoming().user_id == existing().user_id
+        && incoming().created_at == existing().created_at
+        && incoming().updated_at == request.time
+        && (incoming().company_id.size() == 0 || (
+          exists(/databases/$(database)/documents/companies/$(incoming().company_id))
+          && get(/databases/$(database)/documents/companies/$(incoming().company_id)).data.user_id == existing().user_id
+        ))
+        && (
+          (existing().status == 'Draft' && incoming().diff(existing()).affectedKeys().hasOnly([
+            'nomor_bast', 'tanggal_bast', 'kota', 'company_id',
+            'pihak_pertama_pt', 'pihak_pertama_nama', 'pihak_pertama_jabatan', 'pihak_pertama_alamat',
+            'pihak_kedua_nama', 'pihak_kedua_jabatan', 'pihak_kedua_alamat',
+            'nomor_po', 'deskripsi_pekerjaan', 'tanggal_mulai', 'tanggal_selesai',
+            'status', 'signature_party_1', 'signature_party_2', 'use_stempel', 'updated_at'
+          ]))
+        );
+      allow delete: if isValidId(bastId) && isAuthorizedOwner(existing().user_id);
+    }
+
+    match /bast_items/{itemId} {
+      allow get: if isValidId(itemId) && isAuthorizedOwner(existing().user_id);
+      allow list: if isAuthorizedOwner(existing().user_id);
+      allow create: if isValidId(itemId)
+        && isValidBastItem(incoming())
+        && incoming().id == itemId
+        && incoming().created_at == request.time
+        && incoming().updated_at == request.time
+        && exists(/databases/$(database)/documents/bast_documents/$(incoming().bast_id))
+        && get(/databases/$(database)/documents/bast_documents/$(incoming().bast_id)).data.user_id == incoming().user_id;
+      allow update: if isValidId(itemId)
+        && isValidBastItem(incoming())
+        && isAuthorizedOwner(existing().user_id)
+        && incoming().id == existing().id
+        && incoming().user_id == existing().user_id
+        && incoming().bast_id == existing().bast_id
+        && incoming().created_at == existing().created_at
+        && incoming().updated_at == request.time
+        && exists(/databases/$(database)/documents/bast_documents/$(existing().bast_id))
+        && get(/databases/$(database)/documents/bast_documents/$(existing().bast_id)).data.user_id == existing().user_id
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'nomor', 'nama_barang_jasa', 'keterangan', 'urutan', 'updated_at'
+        ]);
+      allow delete: if isValidId(itemId) && isAuthorizedOwner(existing().user_id);
+    }
+
+    match /settings/{userId} {
+      allow get: if isAuthorizedOwner(userId);
+      allow list: if false;
+      allow create: if isAuthorizedOwner(userId)
+        && isValidSettings(incoming())
+        && incoming().user_id == userId
+        && incoming().created_at == request.time
+        && incoming().updated_at == request.time;
+      allow update: if isAuthorizedOwner(userId)
+        && isValidSettings(incoming())
+        && isAuthorizedOwner(existing().user_id)
+        && incoming().user_id == existing().user_id
+        && incoming().created_at == existing().created_at
+        && incoming().updated_at == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'nama_perusahaan', 'alamat', 'kota', 'telepon', 'email',
+          'logo', 'stempel', 'stempel_scale', 'stempel_x', 'stempel_y', 'stempel_target',
+          'signature_party_1', 'signature_party_2', 'app_icon',
+          'auto_number_enabled', 'auto_number_format', 'auto_number_counter',
+          'theme', 'default_pihak_kedua_nama', 'default_pihak_kedua_jabatan',
+          'default_pihak_kedua_alamat', 'updated_at'
+        ]);
+      allow delete: if false;
+    }
+  }
+}

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#1E3A8A"/>
+  <rect x="44" y="44" width="424" height="424" rx="84" stroke="#3B82F6" stroke-width="4" stroke-opacity="0.35"/>
+  <!-- Document sheet -->
+  <path d="M148 112C148 98.7452 158.745 88 172 88H296L364 156V384C364 397.255 353.255 408 340 408H172C158.745 408 148 397.255 148 384V112Z" fill="#FFFFFF"/>
+  <path d="M296 88V140C296 148.837 303.163 156 312 156H364L296 88Z" fill="#BFDBFE"/>
+  <!-- Document header line -->
+  <rect x="180" y="144" width="88" height="14" rx="7" fill="#1E3A8A"/>
+  <rect x="180" y="176" width="152" height="10" rx="5" fill="#94A3B8"/>
+  <rect x="180" y="200" width="152" height="10" rx="5" fill="#94A3B8"/>
+  <rect x="180" y="224" width="112" height="10" rx="5" fill="#94A3B8"/>
+  <!-- Seal / Checkmark badge -->
+  <circle cx="328" cy="348" r="56" fill="#0284C7"/>
+  <circle cx="328" cy="348" r="48" stroke="#FFFFFF" stroke-width="4" stroke-opacity="0.6"/>
+  <path d="M306 348L321 363L352 332" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- BAST ribbon label -->
+  <rect x="176" y="276" width="96" height="34" rx="8" fill="#EFF6FF"/>
+  <text x="224" y="299" text-anchor="middle" fill="#1E3A8A" font-family="Arial, sans-serif" font-weight="bold" font-size="20">BAST</text>
+</svg>

@@ -1,0 +1,448 @@
+{
+  "entities": {
+    "AuthAccount": {
+      "title": "AuthAccount",
+      "description": "Online encrypted PBKDF2-SHA256 authentication account record for Email/Password login.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Deterministic user UID (usr_<16hex>)."
+        },
+        "uid": {
+          "type": "string",
+          "description": "Deterministic user UID (usr_<16hex>)."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Normalized lowercase user email."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User full name or display name."
+        },
+        "saltHex": {
+          "type": "string",
+          "description": "Random 16-byte cryptographic salt encoded as hex."
+        },
+        "hashHex": {
+          "type": "string",
+          "description": "PBKDF2-SHA256 derived key hash encoded as hex."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "uid",
+        "email",
+        "displayName",
+        "saltHex",
+        "hashHex",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "User": {
+      "title": "User",
+      "description": "Authenticated user profile record.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Firebase Auth UID or deterministic user ID."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address."
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the user."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "email", "name", "created_at", "updated_at"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "Partner/Client company record (Pihak Pertama) isolated per user_id.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "user_id": {
+          "type": "string"
+        },
+        "no": {
+          "type": "number"
+        },
+        "nama_pt": {
+          "type": "string"
+        },
+        "nama_pejabat": {
+          "type": "string"
+        },
+        "jabatan_pejabat": {
+          "type": "string"
+        },
+        "alamat": {
+          "type": "string"
+        },
+        "kota": {
+          "type": "string"
+        },
+        "kode_pos": {
+          "type": "string"
+        },
+        "telepon": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "logo": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "user_id",
+        "no",
+        "nama_pt",
+        "nama_pejabat",
+        "jabatan_pejabat",
+        "alamat",
+        "kota",
+        "kode_pos",
+        "telepon",
+        "email",
+        "logo",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "BastDocument": {
+      "title": "BastDocument",
+      "description": "Berita Acara Serah Terima main document isolated per user_id.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "user_id": {
+          "type": "string"
+        },
+        "nomor_bast": {
+          "type": "string"
+        },
+        "tanggal_bast": {
+          "type": "string"
+        },
+        "kota": {
+          "type": "string"
+        },
+        "company_id": {
+          "type": "string"
+        },
+        "pihak_pertama_pt": {
+          "type": "string"
+        },
+        "pihak_pertama_nama": {
+          "type": "string"
+        },
+        "pihak_pertama_jabatan": {
+          "type": "string"
+        },
+        "pihak_pertama_alamat": {
+          "type": "string"
+        },
+        "pihak_kedua_nama": {
+          "type": "string"
+        },
+        "pihak_kedua_jabatan": {
+          "type": "string"
+        },
+        "pihak_kedua_alamat": {
+          "type": "string"
+        },
+        "nomor_po": {
+          "type": "string"
+        },
+        "deskripsi_pekerjaan": {
+          "type": "string"
+        },
+        "tanggal_mulai": {
+          "type": "string"
+        },
+        "tanggal_selesai": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Draft", "Selesai"]
+        },
+        "signature_party_1": {
+          "type": "string"
+        },
+        "signature_party_2": {
+          "type": "string"
+        },
+        "use_stempel": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "user_id",
+        "nomor_bast",
+        "tanggal_bast",
+        "kota",
+        "company_id",
+        "pihak_pertama_pt",
+        "pihak_pertama_nama",
+        "pihak_pertama_jabatan",
+        "pihak_pertama_alamat",
+        "pihak_kedua_nama",
+        "pihak_kedua_jabatan",
+        "pihak_kedua_alamat",
+        "nomor_po",
+        "deskripsi_pekerjaan",
+        "tanggal_mulai",
+        "tanggal_selesai",
+        "status",
+        "signature_party_1",
+        "signature_party_2",
+        "use_stempel",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "BastItem": {
+      "title": "BastItem",
+      "description": "Line item of a BAST document isolated per user_id.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "user_id": {
+          "type": "string"
+        },
+        "bast_id": {
+          "type": "string"
+        },
+        "nomor": {
+          "type": "number"
+        },
+        "nama_barang_jasa": {
+          "type": "string"
+        },
+        "keterangan": {
+          "type": "string"
+        },
+        "urutan": {
+          "type": "number"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "user_id",
+        "bast_id",
+        "nomor",
+        "nama_barang_jasa",
+        "keterangan",
+        "urutan",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Per-user application, kop surat, stamp, signature, and numbering configuration.",
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string"
+        },
+        "nama_perusahaan": {
+          "type": "string"
+        },
+        "alamat": {
+          "type": "string"
+        },
+        "kota": {
+          "type": "string"
+        },
+        "telepon": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "logo": {
+          "type": "string"
+        },
+        "stempel": {
+          "type": "string"
+        },
+        "stempel_scale": {
+          "type": "number"
+        },
+        "stempel_x": {
+          "type": "number"
+        },
+        "stempel_y": {
+          "type": "number"
+        },
+        "stempel_target": {
+          "type": "string",
+          "enum": ["pihak_kedua", "pihak_pertama", "both"]
+        },
+        "signature_party_1": {
+          "type": "string"
+        },
+        "signature_party_2": {
+          "type": "string"
+        },
+        "app_icon": {
+          "type": "string"
+        },
+        "auto_number_enabled": {
+          "type": "boolean"
+        },
+        "auto_number_format": {
+          "type": "string"
+        },
+        "auto_number_counter": {
+          "type": "number"
+        },
+        "theme": {
+          "type": "string",
+          "enum": ["light", "dark"]
+        },
+        "default_pihak_kedua_nama": {
+          "type": "string"
+        },
+        "default_pihak_kedua_jabatan": {
+          "type": "string"
+        },
+        "default_pihak_kedua_alamat": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "user_id",
+        "nama_perusahaan",
+        "alamat",
+        "kota",
+        "telepon",
+        "email",
+        "logo",
+        "stempel",
+        "stempel_scale",
+        "stempel_x",
+        "stempel_y",
+        "stempel_target",
+        "signature_party_1",
+        "signature_party_2",
+        "app_icon",
+        "auto_number_enabled",
+        "auto_number_format",
+        "auto_number_counter",
+        "theme",
+        "default_pihak_kedua_nama",
+        "default_pihak_kedua_jabatan",
+        "default_pihak_kedua_alamat",
+        "created_at",
+        "updated_at"
+      ]
+    }
+  },
+  "firestore": {
+    "/auth_accounts/{accountId}": {
+      "schema": {
+        "$ref": "#/entities/AuthAccount"
+      },
+      "description": "Encrypted PBKDF2-SHA256 Email/Password account records stored online."
+    },
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/User"
+      },
+      "description": "User profile document keyed by userId."
+    },
+    "/companies/{companyId}": {
+      "schema": {
+        "$ref": "#/entities/Company"
+      },
+      "description": "Company records isolated by user_id."
+    },
+    "/bast_documents/{bastId}": {
+      "schema": {
+        "$ref": "#/entities/BastDocument"
+      },
+      "description": "BAST documents isolated by user_id."
+    },
+    "/bast_items/{itemId}": {
+      "schema": {
+        "$ref": "#/entities/BastItem"
+      },
+      "description": "BAST line items isolated by user_id and linked to bast_id."
+    },
+    "/settings/{userId}": {
+      "schema": {
+        "$ref": "#/entities/Settings"
+      },
+      "description": "User-specific application and document settings keyed by userId."
+    }
+  }
+}
