@@ -5,12 +5,15 @@
 
 import React, { useEffect, useState } from 'react';
 import {
+  AlertCircle,
   Building2,
+  CheckCircle2,
   Cloud,
   CloudOff,
   Database,
   FileSpreadsheet,
   FileText,
+  Info,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -56,8 +59,48 @@ import {
   SyncStatus,
 } from './types';
 import { generateNomorBast, generateSafeId } from './utils/formatters';
+import {
+  QuickPopupItem,
+  showQuickPopup,
+  subscribeQuickPopup,
+} from './utils/quickPopup';
 
 export default function App() {
+  const [quickPopup, setQuickPopup] = useState<QuickPopupItem | null>(null);
+
+  useEffect(() => {
+    const unsub = subscribeQuickPopup(setQuickPopup);
+
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const btn = target.closest('button, [role="button"]') as
+        | HTMLButtonElement
+        | HTMLElement
+        | null;
+      if (!btn) return;
+      if ((btn as HTMLButtonElement).disabled) return;
+
+      const rawLabel =
+        btn.getAttribute('data-popup') ||
+        btn.getAttribute('title') ||
+        btn.getAttribute('aria-label') ||
+        btn.textContent ||
+        '';
+      const cleaned = rawLabel.replace(/\s+/g, ' ').trim();
+      if (cleaned) {
+        showQuickPopup(`Klik: ${cleaned}`, 'info', false);
+      } else {
+        showQuickPopup('Tombol diklik', 'info', false);
+      }
+    };
+
+    document.addEventListener('click', handleGlobalClick, false);
+    return () => {
+      unsub();
+      document.removeEventListener('click', handleGlobalClick, false);
+    };
+  }, []);
   const [authUser, setAuthUser] = useState<ActiveAuthUser | null>(() =>
     getSavedAuthSession()
   );
@@ -354,9 +397,34 @@ export default function App() {
     await logoutService();
   };
 
+  const popupOverlay = quickPopup ? (
+    <div className="fixed top-3.5 left-1/2 -translate-x-1/2 z-[120] pointer-events-none px-4 w-full max-w-md flex justify-center">
+      <div
+        key={quickPopup.id}
+        className={`pointer-events-auto px-4 py-2.5 rounded-2xl shadow-lg border text-xs font-bold flex items-center gap-2 backdrop-blur-md transition-all duration-200 ${
+          quickPopup.variant === 'success'
+            ? 'bg-emerald-900/95 text-white border-emerald-500/60'
+            : quickPopup.variant === 'warning'
+            ? 'bg-amber-900/95 text-white border-amber-500/60'
+            : 'bg-slate-900/95 text-white border-blue-400/50'
+        }`}
+      >
+        {quickPopup.variant === 'success' ? (
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+        ) : quickPopup.variant === 'warning' ? (
+          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+        ) : (
+          <Info className="w-4 h-4 text-blue-400 shrink-0" />
+        )}
+        <span className="truncate">{quickPopup.message}</span>
+      </div>
+    </div>
+  ) : null;
+
   if (!authReady) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 gap-3">
+        {popupOverlay}
         <Loader2 className="w-8 h-8 text-blue-900 animate-spin" />
         <p className="text-xs font-semibold text-slate-600">
           Memuat Aplikasi BAST...
@@ -366,7 +434,12 @@ export default function App() {
   }
 
   if (!authUser) {
-    return <AuthView customAppIcon={settings.app_icon} />;
+    return (
+      <>
+        {popupOverlay}
+        <AuthView customAppIcon={settings.app_icon} />
+      </>
+    );
   }
 
   const formInitialBast: BastDocument | null = editingBast
@@ -456,6 +529,7 @@ export default function App() {
       key={authUser.uid}
       className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col md:flex-row"
     >
+      {popupOverlay}
       {/* Desktop / Tablet Sidebar Navigation */}
       <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-30">
         <div className="h-16 px-5 flex items-center gap-3 border-b border-slate-100 dark:border-slate-800">

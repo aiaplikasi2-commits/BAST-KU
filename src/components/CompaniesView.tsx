@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Company } from '../types';
 import { generateSafeId } from '../utils/formatters';
+import { showQuickPopup } from '../utils/quickPopup';
 
 interface CompaniesViewProps {
   uid: string;
@@ -116,9 +117,16 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
         },
         Boolean(editingCompany)
       );
+      showQuickPopup(
+        editingCompany
+          ? `Data ${namaPt.trim()} berhasil diperbarui!`
+          : `Data ${namaPt.trim()} berhasil disimpan!`,
+        'success'
+      );
       setModalOpen(false);
     } catch {
       setFormError('Data gagal disimpan. Silakan coba lagi.');
+      showQuickPopup('Data gagal disimpan. Silakan coba lagi.', 'warning');
     } finally {
       setBusy(false);
     }
@@ -129,6 +137,7 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
     setBusy(true);
     try {
       await onDeleteCompany(deleteTarget.id);
+      showQuickPopup(`Perusahaan ${deleteTarget.nama_pt} dihapus`, 'info');
       setDeleteTarget(null);
     } finally {
       setBusy(false);

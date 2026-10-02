@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Company } from '../types';
 import { generateSafeId } from '../utils/formatters';
+import { showQuickPopup } from '../utils/quickPopup';
 
 interface ExcelImportViewProps {
   uid: string;
@@ -69,6 +70,7 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Template Perusahaan');
     XLSX.writeFile(wb, 'Template_Import_Perusahaan_BAST.xlsx');
+    showQuickPopup('Template Excel (.xlsx) berhasil diunduh!', 'success');
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -264,8 +266,13 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
 
       setImportSuccessCount(importedCount);
       setParsedRows([]);
+      showQuickPopup(
+        `${importedCount} Data Perusahaan berhasil diimport!`,
+        'success'
+      );
     } catch {
       setFileError('Terjadi kesalahan saat menyimpan data ke database cloud.');
+      showQuickPopup('Gagal mengimport data Excel', 'warning');
     } finally {
       setImporting(false);
     }

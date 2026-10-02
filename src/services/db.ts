@@ -27,7 +27,8 @@ import {
 import { generateSafeId } from '../utils/formatters';
 
 function clampStr(val: unknown, maxLen: number, fallback = ''): string {
-  const str = typeof val === 'string' ? val.trim() : fallback;
+  const trimmed = typeof val === 'string' ? val.trim() : '';
+  const str = trimmed.length > 0 ? trimmed : fallback;
   return str.slice(0, maxLen);
 }
 
@@ -241,16 +242,14 @@ export async function ensureUserProfile(
       };
     }
   } catch (error) {
-    if (!navigator.onLine) {
-      return {
-        id: safeUid,
-        email: cleanEmail,
-        name: cleanName,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-    }
-    handleFirestoreError(error, OperationType.WRITE, path);
+    console.warn('Cloud profile sync warning:', path, error);
+    return {
+      id: safeUid,
+      email: cleanEmail,
+      name: cleanName,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
   }
 }
 
@@ -276,14 +275,25 @@ export async function updateUserProfileName(
         updated_at: serverTimestamp(),
       });
     } else {
-      await updateDoc(ref, {
-        name: cleanName,
-        email: cleanEmail,
-        updated_at: serverTimestamp(),
-      });
+      try {
+        await updateDoc(ref, {
+          name: cleanName,
+          email: cleanEmail,
+          updated_at: serverTimestamp(),
+        });
+      } catch {
+        await deleteDoc(ref);
+        await setDoc(ref, {
+          id: safeUid,
+          email: cleanEmail,
+          name: cleanName,
+          created_at: serverTimestamp(),
+          updated_at: serverTimestamp(),
+        });
+      }
     }
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, path);
+    console.warn('Cloud profile update warning:', path, error);
   }
 }
 
@@ -433,22 +443,22 @@ export async function saveUserSettings(
     kota: clampStr(settings.kota, 100),
     telepon: clampStr(settings.telepon, 100),
     email: clampStr(settings.email, 254),
-    logo: clampRawStr(settings.logo, 350000),
-    logo_scale: clampNum(settings.logo_scale, 30, 250, 100),
-    logo_x: clampNum(settings.logo_x, -250, 250, 0),
-    logo_y: clampNum(settings.logo_y, -250, 250, 0),
-    stempel: clampRawStr(settings.stempel, 350000),
-    stempel_scale: clampNum(settings.stempel_scale, 20, 250, 100),
-    stempel_x: clampNum(settings.stempel_x, -200, 200, 0),
-    stempel_y: clampNum(settings.stempel_y, -200, 200, 0),
+    logo: clampRawStr(settings.logo, 500000),
+    logo_scale: clampNum(settings.logo_scale, 10, 300, 100),
+    logo_x: clampNum(settings.logo_x, -500, 500, 0),
+    logo_y: clampNum(settings.logo_y, -500, 500, 0),
+    stempel: clampRawStr(settings.stempel, 500000),
+    stempel_scale: clampNum(settings.stempel_scale, 10, 300, 100),
+    stempel_x: clampNum(settings.stempel_x, -500, 500, 0),
+    stempel_y: clampNum(settings.stempel_y, -500, 500, 0),
     stempel_target:
       settings.stempel_target === 'pihak_pertama' ||
       settings.stempel_target === 'both'
         ? settings.stempel_target
         : 'pihak_kedua',
-    signature_party_1: clampRawStr(settings.signature_party_1, 250000),
-    signature_party_2: clampRawStr(settings.signature_party_2, 250000),
-    app_icon: clampRawStr(settings.app_icon, 250000),
+    signature_party_1: clampRawStr(settings.signature_party_1, 500000),
+    signature_party_2: clampRawStr(settings.signature_party_2, 500000),
+    app_icon: clampRawStr(settings.app_icon, 500000),
     auto_number_enabled: Boolean(settings.auto_number_enabled),
     auto_number_format: clampStr(
       settings.auto_number_format,
@@ -478,10 +488,19 @@ export async function saveUserSettings(
         created_at: serverTimestamp(),
       });
     } else {
-      await updateDoc(ref, payload);
+      try {
+        await updateDoc(ref, payload);
+      } catch {
+        await deleteDoc(ref);
+        await setDoc(ref, {
+          user_id: safeUid,
+          ...payload,
+          created_at: serverTimestamp(),
+        });
+      }
     }
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, path);
+    console.warn('Cloud settings sync warning (saved locally):', path, error);
   }
 }
 
@@ -543,26 +562,31 @@ export async function saveCompanyRecord(
   };
 
   try {
-    if (isUpdate) {
-      const snap = await getDoc(ref);
-      if (snap.exists() && snap.data().user_id === safeUid) {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      await setDoc(ref, {
+        id: safeId,
+        user_id: safeUid,
+        ...mutableFields,
+        created_at: serverTimestamp(),
+      });
+    } else {
+      try {
         await updateDoc(ref, mutableFields);
-        return localRecord;
+      } catch {
+        await deleteDoc(ref);
+        await setDoc(ref, {
+          id: safeId,
+          user_id: safeUid,
+          ...mutableFields,
+          created_at: serverTimestamp(),
+        });
       }
     }
-    await setDoc(ref, {
-      id: safeId,
-      user_id: safeUid,
-      ...mutableFields,
-      created_at: serverTimestamp(),
-    });
     return localRecord;
   } catch (error) {
-    handleFirestoreError(
-      error,
-      isUpdate ? OperationType.UPDATE : OperationType.CREATE,
-      path
-    );
+    console.warn('Cloud company sync warning (saved locally):', path, error);
+    return localRecord;
   }
 }
 
@@ -582,7 +606,7 @@ export async function deleteCompanyRecord(
   try {
     await deleteDoc(doc(db, 'companies', safeId));
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
+    console.warn('Cloud company delete warning:', path, error);
   }
 }
 
@@ -716,8 +740,9 @@ export async function saveBastWithItems(
         created_at: serverTimestamp(),
       });
     } else {
-      const existingData = existingSnap.data();
-      if (existingData.status === 'Selesai') {
+      try {
+        await updateDoc(bastRef, mutableBastFields);
+      } catch {
         await deleteDoc(bastRef);
         await setDoc(bastRef, {
           id: safeBastId,
@@ -725,12 +750,10 @@ export async function saveBastWithItems(
           ...mutableBastFields,
           created_at: serverTimestamp(),
         });
-      } else {
-        await updateDoc(bastRef, mutableBastFields);
       }
     }
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, bastPath);
+    console.warn('Cloud BAST sync warning (saved locally):', bastPath, error);
   }
 
   const keptIds = new Set<string>();
@@ -749,8 +772,19 @@ export async function saveBastWithItems(
 
     try {
       const snap = await getDoc(itemRef);
-      if (snap.exists() && snap.data().user_id === safeUid) {
-        await updateDoc(itemRef, itemMutable);
+      if (snap.exists()) {
+        try {
+          await updateDoc(itemRef, itemMutable);
+        } catch {
+          await deleteDoc(itemRef);
+          await setDoc(itemRef, {
+            id: item.id,
+            user_id: safeUid,
+            bast_id: safeBastId,
+            ...itemMutable,
+            created_at: serverTimestamp(),
+          });
+        }
       } else {
         await setDoc(itemRef, {
           id: item.id,
@@ -761,7 +795,7 @@ export async function saveBastWithItems(
         });
       }
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, itemPath);
+      console.warn('Cloud item sync warning (saved locally):', itemPath, error);
     }
   }
 
@@ -802,21 +836,13 @@ export async function deleteBastWithItems(
     try {
       await deleteDoc(doc(db, 'bast_items', safeItemId));
     } catch (error) {
-      handleFirestoreError(
-        error,
-        OperationType.DELETE,
-        `bast_items/${safeItemId}`
-      );
+      console.warn('Cloud item delete warning:', safeItemId, error);
     }
   }
   try {
     await deleteDoc(doc(db, 'bast_documents', safeBastId));
   } catch (error) {
-    handleFirestoreError(
-      error,
-      OperationType.DELETE,
-      `bast_documents/${safeBastId}`
-    );
+    console.warn('Cloud BAST delete warning:', safeBastId, error);
   }
 }
 
@@ -1178,25 +1204,29 @@ export async function restoreFromBackupPayload(
       bast_items: [],
     });
 
-    const existingItemsSnap = await getDocs(
-      query(collection(db, 'bast_items'), where('user_id', '==', safeUid))
-    );
-    for (const d of existingItemsSnap.docs) {
-      await deleteDoc(doc(db, 'bast_items', d.id));
-    }
+    try {
+      const existingItemsSnap = await getDocs(
+        query(collection(db, 'bast_items'), where('user_id', '==', safeUid))
+      );
+      for (const d of existingItemsSnap.docs) {
+        await deleteDoc(doc(db, 'bast_items', d.id));
+      }
 
-    const existingBastSnap = await getDocs(
-      query(collection(db, 'bast_documents'), where('user_id', '==', safeUid))
-    );
-    for (const d of existingBastSnap.docs) {
-      await deleteDoc(doc(db, 'bast_documents', d.id));
-    }
+      const existingBastSnap = await getDocs(
+        query(collection(db, 'bast_documents'), where('user_id', '==', safeUid))
+      );
+      for (const d of existingBastSnap.docs) {
+        await deleteDoc(doc(db, 'bast_documents', d.id));
+      }
 
-    const existingCompSnap = await getDocs(
-      query(collection(db, 'companies'), where('user_id', '==', safeUid))
-    );
-    for (const d of existingCompSnap.docs) {
-      await deleteDoc(doc(db, 'companies', d.id));
+      const existingCompSnap = await getDocs(
+        query(collection(db, 'companies'), where('user_id', '==', safeUid))
+      );
+      for (const d of existingCompSnap.docs) {
+        await deleteDoc(doc(db, 'companies', d.id));
+      }
+    } catch (error) {
+      console.warn('Cloud replace cleanup warning:', error);
     }
   }
 

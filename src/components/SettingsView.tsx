@@ -27,6 +27,7 @@ import {
   compressImageFile,
   convertGoogleDriveUrl,
 } from '../utils/formatters';
+import { showQuickPopup } from '../utils/quickPopup';
 import { SignatureControl } from './SignatureControl';
 
 interface SettingsViewProps {
@@ -106,11 +107,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             : 'Ikon Aplikasi'
         } berhasil diupload dan disimpan ke Cloud.`,
       });
+      showQuickPopup('Gambar berhasil diupload & disimpan ke Cloud!', 'success');
     } catch {
       setStatusMsg({
         type: 'error',
         text: 'Gagal memproses gambar. Silakan coba file lain.',
       });
+      showQuickPopup('Gagal memproses gambar', 'warning');
     } finally {
       e.target.value = '';
     }
@@ -126,6 +129,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       type: 'success',
       text: 'URL Ikon Aplikasi (Google Drive / Direct Image) berhasil dikonversi dan diterapkan.',
     });
+    showQuickPopup('URL Ikon Aplikasi berhasil diterapkan!', 'success');
   };
 
   const handleSaveAll = async (e: React.FormEvent) => {
@@ -141,11 +145,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         type: 'success',
         text: 'Pengaturan berhasil disimpan dan disinkronkan ke Cloud.',
       });
+      showQuickPopup('Pengaturan berhasil disimpan ke Cloud!', 'success');
     } catch {
       setStatusMsg({
         type: 'error',
         text: 'Data gagal disimpan. Silakan coba lagi.',
       });
+      showQuickPopup('Data gagal disimpan. Silakan coba lagi.', 'warning');
     } finally {
       setSaving(false);
     }
@@ -158,6 +164,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         type: 'error',
         text: 'Password baru minimal harus 6 karakter.',
       });
+      showQuickPopup('Password baru minimal 6 karakter', 'warning');
       return;
     }
     if (newPassword !== confirmNewPassword) {
@@ -165,6 +172,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         type: 'error',
         text: 'Konfirmasi password baru tidak cocok.',
       });
+      showQuickPopup('Konfirmasi password baru tidak cocok', 'warning');
       return;
     }
 
@@ -177,11 +185,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         type: 'success',
         text: 'Password akun berhasil diperbarui dengan enkripsi PBKDF2-SHA256.',
       });
+      showQuickPopup('Password akun berhasil diperbarui!', 'success');
     } catch {
       setStatusMsg({
         type: 'error',
         text: 'Gagal memperbarui password. Silakan coba lagi.',
       });
+      showQuickPopup('Gagal memperbarui password', 'warning');
     } finally {
       setSaving(false);
     }

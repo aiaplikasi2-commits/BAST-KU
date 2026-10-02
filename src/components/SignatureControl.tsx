@@ -8,6 +8,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { compressImageFile } from '../utils/formatters';
+import { showQuickPopup } from '../utils/quickPopup';
 
 interface SignatureControlProps {
   label: string;
@@ -164,6 +165,7 @@ export const SignatureControl: React.FC<SignatureControlProps> = ({
     const pngDataUrl = outCanvas.toDataURL('image/png');
     onChange(pngDataUrl);
     setActiveMode('preview');
+    showQuickPopup('Tanda tangan berhasil disimpan!', 'success');
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -181,6 +183,7 @@ export const SignatureControl: React.FC<SignatureControlProps> = ({
       const compressed = await compressImageFile(file, 500, 260, true);
       onChange(compressed);
       setActiveMode('preview');
+      showQuickPopup('File tanda tangan berhasil diupload!', 'success');
     } catch (err) {
       setUploadError(
         err instanceof Error ? err.message : 'Gagal memuat gambar tanda tangan.'

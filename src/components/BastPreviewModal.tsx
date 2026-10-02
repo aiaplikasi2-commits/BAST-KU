@@ -27,6 +27,7 @@ import {
   getKalimatTanggalBast,
 } from '../utils/formatters';
 import { downloadBastPdf, shareBastPdf } from '../utils/pdfGenerator';
+import { showQuickPopup } from '../utils/quickPopup';
 
 interface BastPreviewModalProps {
   bast: BastDocument;
@@ -98,12 +99,14 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
   const handleAdjustLogoScale = async (delta: number) => {
     const nextVal = Math.max(40, Math.min(220, logoScalePct + delta));
     setLogoScalePct(nextVal);
+    showQuickPopup(`Ukuran Logo KOP: ${nextVal}%`, 'info');
     await persistLogoLayout(nextVal, logoX, logoY);
   };
 
   const handleSetLogoScale = async (val: number) => {
     const nextVal = Math.max(40, Math.min(220, Math.round(val)));
     setLogoScalePct(nextVal);
+    showQuickPopup(`Ukuran Logo KOP: ${nextVal}%`, 'info');
     await persistLogoLayout(nextVal, logoX, logoY);
   };
 
@@ -112,12 +115,14 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
     const nextY = Math.max(-120, Math.min(120, logoY + dy));
     setLogoX(nextX);
     setLogoY(nextY);
+    showQuickPopup(`Posisi Logo KOP: (${nextX}, ${nextY})`, 'info');
     await persistLogoLayout(logoScalePct, nextX, nextY);
   };
 
   const handleResetLogoPos = async () => {
     setLogoX(0);
     setLogoY(0);
+    showQuickPopup('Posisi Logo KOP direset ke (0, 0)', 'success');
     await persistLogoLayout(logoScalePct, 0, 0);
   };
 
@@ -247,6 +252,7 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
     setPdfBusy('download');
     try {
       await downloadBastPdf(bast, sortedItems, effectiveSettings);
+      showQuickPopup(`PDF BAST ${bast.nomor_bast} berhasil diunduh!`, 'success');
     } finally {
       setPdfBusy(null);
     }
@@ -255,6 +261,7 @@ export const BastPreviewModal: React.FC<BastPreviewModalProps> = ({
   const handleSharePdf = async () => {
     setPdfBusy('share');
     try {
+      showQuickPopup('Membuka menu Bagikan PDF...', 'info');
       await shareBastPdf(bast, sortedItems, effectiveSettings);
     } catch {
       // User cancelled native share sheet

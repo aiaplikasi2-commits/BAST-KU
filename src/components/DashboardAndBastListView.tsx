@@ -33,6 +33,7 @@ import {
   generateNomorBast,
 } from '../utils/formatters';
 import { downloadBastPdf, shareBastPdf } from '../utils/pdfGenerator';
+import { showQuickPopup } from '../utils/quickPopup';
 import { BastPreviewModal } from './BastPreviewModal';
 
 interface DashboardAndBastListViewProps {
@@ -145,6 +146,7 @@ export const DashboardAndBastListView: React.FC<
     setBusyId(`pdf_${bast.id}`);
     try {
       await downloadBastPdf(bast, getItemsForBast(bast.id), settings);
+      showQuickPopup(`PDF BAST ${bast.nomor_bast} berhasil diunduh!`, 'success');
     } finally {
       setBusyId(null);
     }
@@ -153,6 +155,7 @@ export const DashboardAndBastListView: React.FC<
   const handleSharePdf = async (bast: BastDocument) => {
     setBusyId(`share_${bast.id}`);
     try {
+      showQuickPopup('Membuka menu Bagikan PDF...', 'info');
       await shareBastPdf(bast, getItemsForBast(bast.id), settings);
     } catch {
       // User dismissed share sheet
@@ -165,6 +168,7 @@ export const DashboardAndBastListView: React.FC<
     setBusyId(`dup_${bast.id}`);
     try {
       await onDuplicateBast(bast);
+      showQuickPopup(`BAST ${bast.nomor_bast} berhasil diduplikat!`, 'success');
     } finally {
       setBusyId(null);
     }
@@ -175,6 +179,7 @@ export const DashboardAndBastListView: React.FC<
     setBusyId(`del_${deleteConfirmBast.id}`);
     try {
       await onDeleteBast(deleteConfirmBast);
+      showQuickPopup(`BAST ${deleteConfirmBast.nomor_bast} berhasil dihapus`, 'info');
       setDeleteConfirmBast(null);
     } finally {
       setBusyId(null);

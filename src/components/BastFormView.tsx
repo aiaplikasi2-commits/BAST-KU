@@ -23,8 +23,9 @@ import {
 import {
   generateNomorBast,
   generateSafeId,
-   getKalimatTanggalBast,
+  getKalimatTanggalBast,
 } from '../utils/formatters';
+import { showQuickPopup } from '../utils/quickPopup';
 import { BastPreviewModal } from './BastPreviewModal';
 import { SignatureControl } from './SignatureControl';
 
@@ -68,7 +69,9 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
   onCancel,
 }) => {
   const todayIso = new Date().toISOString().slice(0, 10);
-  const isEditing = Boolean(existingBast);
+  const isEditing = Boolean(
+    existingBast && existingBast.nomor_bast.trim() !== ''
+  );
 
   const [useAutoNumber, setUseAutoNumber] = useState<boolean>(
     existingBast ? false : settings.auto_number_enabled
@@ -280,6 +283,7 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
     });
     setSelectedCompanyId(newComp.id);
     setCompanySavedToast(true);
+    showQuickPopup('Data Perusahaan berhasil disimpan ke Database PT!', 'success');
     setTimeout(() => setCompanySavedToast(false), 3000);
   };
 
@@ -292,10 +296,12 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
         keterangan: 'Sesuai',
       },
     ]);
+    showQuickPopup('Baris rincian baru ditambahkan', 'info');
   };
 
   const handleLoadExampleItems = () => {
     setItems(getDefaultFourItems());
+    showQuickPopup('4 Baris rincian default dimuat', 'success');
   };
 
   const handleResetToSingleEmptyRow = () => {
@@ -306,11 +312,13 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
         keterangan: 'Sesuai',
       },
     ]);
+    showQuickPopup('Rincian dikosongkan menjadi 1 baris', 'info');
   };
 
   const handleRemoveItem = (idx: number) => {
     if (items.length <= 1) return;
     setItems((prev) => prev.filter((_, i) => i !== idx));
+    showQuickPopup(`Baris rincian #${idx + 1} dihapus`, 'info');
   };
 
   const handleMoveItem = (idx: number, dir: -1 | 1) => {
@@ -323,6 +331,7 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
       copy[target] = temp;
       return copy;
     });
+    showQuickPopup('Urutan baris rincian dipindahkan', 'info');
   };
 
   const handleItemChange = (
@@ -336,37 +345,16 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
   };
 
   const validateForm = (targetStatus: BastStatus): string | null => {
-    if (!nomorBast.trim()) return 'Nomor BAST wajib diisi.';
-    const duplicateNomor = allBastDocuments.find(
-      (d) =>
-        d.id !== existingBast?.id &&
-        d.nomor_bast.trim().toLowerCase() === nomorBast.trim().toLowerCase()
-    );
-    if (duplicateNomor) {
-      return `Nomor BAST "${nomorBast.trim()}" sudah digunakan pada dokumen lain. Gunakan nomor unik.`;
+    if (!pihakPertamaPt.trim()) {
+      return 'Nama PT / Perusahaan (Pihak Pertama) wajib diisi.';
     }
-    if (!tanggalBast.trim()) return 'Tanggal BAST wajib diisi.';
-    if (!kota.trim()) return 'Kota penerbitan wajib diisi.';
-    if (!pihakPertamaPt.trim()) return 'Nama PT (Pihak Pertama) wajib diisi.';
-    if (!pihakPertamaNama.trim())
-      return 'Nama Pejabat (Pihak Pertama) wajib diisi.';
-    if (!pihakPertamaAlamat.trim())
-      return 'Alamat Pihak Pertama wajib diisi.';
-    if (!pihakKeduaNama.trim()) return 'Nama Pihak Kedua wajib diisi.';
-    if (!pihakKeduaAlamat.trim()) return 'Alamat Pihak Kedua wajib diisi.';
-    if (!tanggalMulai.trim() || !tanggalSelesai.trim()) {
-      return 'Tanggal mulai dan tanggal selesai pekerjaan wajib diisi.';
+    if (targetStatus === 'Selesai' && !pihakPertamaNama.trim()) {
+      return 'Nama Pejabat / Perwakilan (Pihak Pertama) wajib diisi.';
     }
 
     const validItems = items.filter((it) => it.nama_barang_jasa.trim() !== '');
     if (validItems.length === 0) {
-      return 'Minimal satu item Barang / Jasa harus diisi.';
-    }
-    if (
-      targetStatus === 'Selesai' &&
-      items.some((it) => !it.nama_barang_jasa.trim())
-    ) {
-      return 'Semua baris Barang / Jasa harus terisi sebelum menyelesaikan BAST (hapus baris kosong jika tidak digunakan).';
+      return 'Minimal satu baris Rincian Barang / Jasa harus diisi.';
     }
     return null;
   };
@@ -382,24 +370,39 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
     const validItems = items.filter((it) => it.nama_barang_jasa.trim() !== '');
     const sourceItems = validItems.length > 0 ? validItems : items;
 
+    const finalNomorBast =
+      nomorBast.trim() ||
+      generateNomorBast(
+        settings.auto_number_format,
+        Math.max(1, settings.auto_number_counter || 1),
+        tanggalBast || todayIso
+      );
+
     const bastObj: BastDocument = {
       id: bastId,
       user_id: uid,
-      nomor_bast: nomorBast.trim(),
-      tanggal_bast: tanggalBast,
-      kota: kota.trim(),
+      nomor_bast: finalNomorBast,
+      tanggal_bast: tanggalBast.trim() || todayIso,
+      kota: kota.trim() || settings.kota || 'Bogor',
       company_id: selectedCompanyId,
-      pihak_pertama_pt: pihakPertamaPt.trim(),
-      pihak_pertama_nama: pihakPertamaNama.trim(),
+      pihak_pertama_pt: pihakPertamaPt.trim() || '-',
+      pihak_pertama_nama: pihakPertamaNama.trim() || '-',
       pihak_pertama_jabatan: pihakPertamaJabatan.trim(),
-      pihak_pertama_alamat: pihakPertamaAlamat.trim(),
-      pihak_kedua_nama: pihakKeduaNama.trim(),
+      pihak_pertama_alamat: pihakPertamaAlamat.trim() || '-',
+      pihak_kedua_nama:
+        pihakKeduaNama.trim() ||
+        settings.default_pihak_kedua_nama ||
+        'MUHAMAD RIDHO',
       pihak_kedua_jabatan: pihakKeduaJabatan.trim(),
-      pihak_kedua_alamat: pihakKeduaAlamat.trim(),
+      pihak_kedua_alamat:
+        pihakKeduaAlamat.trim() ||
+        settings.default_pihak_kedua_alamat ||
+        settings.alamat ||
+        '-',
       nomor_po: nomorPo.trim(),
       deskripsi_pekerjaan: deskripsiPekerjaan.trim(),
-      tanggal_mulai: tanggalMulai,
-      tanggal_selesai: tanggalSelesai,
+      tanggal_mulai: tanggalMulai.trim() || tanggalBast.trim() || todayIso,
+      tanggal_selesai: tanggalSelesai.trim() || tanggalBast.trim() || todayIso,
       status: targetStatus,
       signature_party_1: signatureParty1,
       signature_party_2: signatureParty2,
@@ -426,6 +429,7 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
   const handleOpenPreview = () => {
     setErrorMsg(null);
     setShowPreview(true);
+    showQuickPopup('Membuka VIEW PDF A4...', 'info');
   };
 
   const handleSaveSubmit = async (targetStatus: BastStatus) => {
@@ -433,6 +437,7 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
     const validationErr = validateForm(targetStatus);
     if (validationErr) {
       setErrorMsg(validationErr);
+      showQuickPopup(validationErr, 'warning');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -445,8 +450,17 @@ export const BastFormView: React.FC<BastFormViewProps> = ({
         itemsList,
         !isEditing && useAutoNumber
       );
-    } catch {
-      setErrorMsg('Data gagal disimpan. Silakan coba lagi.');
+      showQuickPopup(
+        `Dokumen BAST (${targetStatus}) berhasil disimpan!`,
+        'success'
+      );
+    } catch (err) {
+      const msg =
+        err instanceof Error && err.message
+          ? err.message
+          : 'Data gagal disimpan. Silakan coba lagi.';
+      setErrorMsg(msg);
+      showQuickPopup(msg, 'warning');
     } finally {
       setSavingState(null);
     }

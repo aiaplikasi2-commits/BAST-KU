@@ -260,18 +260,26 @@ export async function compressImageFile(
           ? canvas.toDataURL('image/png')
           : canvas.toDataURL('image/jpeg', 0.82);
 
-        // If PNG is still larger than 220KB, scale down slightly to guarantee Firestore compliance
-        if (dataUrl.length > 220000) {
+        // Iteratively scale down if Data URL exceeds 140KB so Firestore documents never hit size limits
+        let curW = width;
+        let curH = height;
+        let attempts = 0;
+        while (dataUrl.length > 140000 && attempts < 4) {
+          attempts++;
+          curW = Math.max(48, Math.round(curW * 0.72));
+          curH = Math.max(48, Math.round(curH * 0.72));
           const scaleCanvas = document.createElement('canvas');
-          scaleCanvas.width = Math.round(width * 0.65);
-          scaleCanvas.height = Math.round(height * 0.65);
+          scaleCanvas.width = curW;
+          scaleCanvas.height = curH;
           const sCtx = scaleCanvas.getContext('2d');
           if (sCtx) {
-            sCtx.clearRect(0, 0, scaleCanvas.width, scaleCanvas.height);
-            sCtx.drawImage(img, 0, 0, scaleCanvas.width, scaleCanvas.height);
+            sCtx.clearRect(0, 0, curW, curH);
+            sCtx.drawImage(img, 0, 0, curW, curH);
             dataUrl = isPng
               ? scaleCanvas.toDataURL('image/png')
               : scaleCanvas.toDataURL('image/jpeg', 0.75);
+          } else {
+            break;
           }
         }
 

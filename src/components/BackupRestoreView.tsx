@@ -15,6 +15,7 @@ import {
   BastItem,
   Company,
 } from '../types';
+import { showQuickPopup } from '../utils/quickPopup';
 
 interface BackupRestoreViewProps {
   uid: string;
@@ -97,6 +98,7 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
     URL.revokeObjectURL(url);
 
     setSuccessMsg(`File backup "${filename}" berhasil dibuat dan diunduh.`);
+    showQuickPopup(`File backup ${filename} berhasil diunduh!`, 'success');
   };
 
   const handleSelectRestoreFile = async (
@@ -149,11 +151,13 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({
       setSuccessMsg(
         `Pemulihan data berhasil diselesaikan (${restorePreview.companies.length} perusahaan & ${restorePreview.bast_documents.length} dokumen BAST).`
       );
+      showQuickPopup('Restore data JSON berhasil diselesaikan!', 'success');
       setRestorePreview(null);
     } catch {
       setErrorMsg(
         'Gagal memulihkan data ke database cloud. Periksa koneksi internet Anda dan coba lagi.'
       );
+      showQuickPopup('Gagal memulihkan data backup', 'warning');
     } finally {
       setRestoring(false);
     }
