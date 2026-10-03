@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import {
   AlertCircle,
+  Building2,
   CheckCircle2,
   Download,
   FileSpreadsheet,
@@ -9,6 +10,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { Company } from '../types';
+import { downloadCompanyExcelTemplate } from '../utils/excelCompanyHelper';
 import { generateSafeId } from '../utils/formatters';
 import { showQuickPopup } from '../utils/quickPopup';
 
@@ -24,12 +26,18 @@ interface ExcelImportViewProps {
 
 type DuplicateAction = 'skip' | 'update' | 'create_new';
 
-interface ParsedExcelRow {
+export interface ParsedExcelRow {
   rowIndex: number;
   rawNo: string;
   no: number | null;
   nama_pt: string;
   nama_pejabat: string;
+  jabatan_pejabat: string;
+  alamat: string;
+  kota: string;
+  kode_pos: string;
+  telepon: string;
+  email: string;
   isValid: boolean;
   errorReason: string | null;
   existingCompany?: Company;
@@ -54,23 +62,12 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   /**
-   * Generates & downloads the official Excel Template (.xlsx)
-   * Header: NO | NAMA PT | NAMA PEJABAT
+   * Generates & downloads the complete official Excel Template (.xlsx)
+   * 9 Columns:
+   * No Urut | Nama PT / Perusahaan * | Nama Pejabat * | Jabatan Pejabat | Alamat Lengkap | Kota / Kabupaten | Kode Pos | Telepon | Email
    */
   const handleDownloadTemplate = () => {
-    const rows = [
-      ['NO', 'NAMA PT', 'NAMA PEJABAT'],
-      [1, 'PT. KANSAI PAINT INDONESIA', 'MUHAMAD RIDHO'],
-      [2, 'PT. CONTOH INDONESIA', 'BUDI SANTOSO'],
-    ];
-
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 8 }, { wch: 36 }, { wch: 28 }];
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Template Perusahaan');
-    XLSX.writeFile(wb, 'Template_Import_Perusahaan_BAST.xlsx');
-    showQuickPopup('Template Excel (.xlsx) berhasil diunduh!', 'success');
+    downloadCompanyExcelTemplate();
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -101,11 +98,17 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
         return;
       }
 
-      // Automatically detect the header row containing NO | NAMA PT | NAMA PEJABAT
+      // Automatically detect the header row and map all 9 columns flexibly
       let headerRowIdx = -1;
       let colNo = -1;
       let colNamaPt = -1;
       let colNamaPejabat = -1;
+      let colJabatan = -1;
+      let colAlamat = -1;
+      let colKota = -1;
+      let colKodePos = -1;
+      let colTelepon = -1;
+      let colEmail = -1;
 
       for (let r = 0; r < Math.min(10, matrix.length); r++) {
         const row = matrix[r];
@@ -114,29 +117,92 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
           String(cell ?? '')
             .trim()
             .toUpperCase()
+            .replace(/[*_]/g, '')
             .replace(/\s+/g, ' ')
         );
 
-        const idxNo = normalized.findIndex((c) => c === 'NO' || c === 'NOMOR');
+        const idxNo = normalized.findIndex(
+          (c) => c === 'NO' || c === 'NO URUT' || c === 'NOMOR' || c === 'NOMOR URUT'
+        );
         const idxPt = normalized.findIndex(
-          (c) => c === 'NAMA PT' || c === 'NAMA PERUSAHAAN'
+          (c) =>
+            c === 'NAMA PT' ||
+            c === 'NAMA PERUSAHAAN' ||
+            c === 'NAMA PT / PERUSAHAAN' ||
+            c === 'NAMA PT/PERUSAHAAN' ||
+            c === 'PERUSAHAAN' ||
+            c === 'PT'
         );
         const idxPejabat = normalized.findIndex(
-          (c) => c === 'NAMA PEJABAT' || c === 'PEJABAT'
+          (c) =>
+            c === 'NAMA PEJABAT' ||
+            c === 'PEJABAT' ||
+            c === 'PERWAKILAN' ||
+            c === 'PIC'
         );
 
-        if (idxNo !== -1 && idxPt !== -1 && idxPejabat !== -1) {
+        if (idxPt !== -1 && idxPejabat !== -1) {
           headerRowIdx = r;
-          colNo = idxNo;
+          colNo = idxNo !== -1 ? idxNo : 0;
           colNamaPt = idxPt;
           colNamaPejabat = idxPejabat;
+
+          colJabatan = normalized.findIndex(
+            (c) =>
+              c === 'JABATAN PEJABAT' ||
+              c === 'JABATAN' ||
+              c === 'POSISI' ||
+              c.includes('JABATAN')
+          );
+          colAlamat = normalized.findIndex(
+            (c) =>
+              c === 'ALAMAT LENGKAP' ||
+              c === 'ALAMAT' ||
+              c === 'ALAMAT PERUSAHAAN' ||
+              c.includes('ALAMAT')
+          );
+          colKota = normalized.findIndex(
+            (c) =>
+              c === 'KOTA / KABUPATEN' ||
+              c === 'KOTA/KABUPATEN' ||
+              c === 'KOTA' ||
+              c === 'KABUPATEN' ||
+              c.includes('KOTA') ||
+              c.includes('KABUPATEN')
+          );
+          colKodePos = normalized.findIndex(
+            (c) =>
+              c === 'KODE POS' ||
+              c === 'KODEPOS' ||
+              c === 'POS' ||
+              c.includes('KODE POS')
+          );
+          colTelepon = normalized.findIndex(
+            (c) =>
+              c === 'TELEPON' ||
+              c === 'TELP' ||
+              c === 'NO TELEPON' ||
+              c === 'NO TELP' ||
+              c === 'HP' ||
+              c === 'PHONE' ||
+              c.includes('TELEPON') ||
+              c.includes('TELP')
+          );
+          colEmail = normalized.findIndex(
+            (c) =>
+              c === 'EMAIL' ||
+              c === 'E-MAIL' ||
+              c === 'SUREL' ||
+              c.includes('EMAIL')
+          );
+
           break;
         }
       }
 
       if (headerRowIdx === -1) {
         setFileError(
-          'Header kolom tidak sesuai. Pastikan baris header memiliki kolom persis: NO | NAMA PT | NAMA PEJABAT'
+          'Header kolom tidak sesuai. Pastikan file Excel memiliki kolom utama: No Urut | Nama PT / Perusahaan * | Nama Pejabat * (disarankan unduh template lengkap).'
         );
         setParsedRows([]);
         return;
@@ -157,26 +223,45 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
         const rawNo = String(row[colNo] ?? '').trim();
         const rawPt = String(row[colNamaPt] ?? '').trim();
         const rawPejabat = String(row[colNamaPejabat] ?? '').trim();
+        const rawJabatan = colJabatan !== -1 ? String(row[colJabatan] ?? '').trim() : '';
+        const rawAlamat = colAlamat !== -1 ? String(row[colAlamat] ?? '').trim() : '';
+        const rawKota = colKota !== -1 ? String(row[colKota] ?? '').trim() : '';
+        const rawKodePos = colKodePos !== -1 ? String(row[colKodePos] ?? '').trim() : '';
+        const rawTelepon = colTelepon !== -1 ? String(row[colTelepon] ?? '').trim() : '';
+        const rawEmail = colEmail !== -1 ? String(row[colEmail] ?? '').trim() : '';
 
         // Skip completely empty trailing rows
-        if (!rawNo && !rawPt && !rawPejabat) continue;
+        if (
+          !rawNo &&
+          !rawPt &&
+          !rawPejabat &&
+          !rawJabatan &&
+          !rawAlamat &&
+          !rawKota &&
+          !rawKodePos &&
+          !rawTelepon &&
+          !rawEmail
+        ) {
+          continue;
+        }
 
-        const parsedNo = Number(rawNo);
+        const digitsOnly = rawNo.replace(/[^0-9]/g, '');
+        const parsedNo = digitsOnly ? Number(digitsOnly) : NaN;
+        const autoNo =
+          !isNaN(parsedNo) && parsedNo > 0 ? Math.floor(parsedNo) : r - headerRowIdx;
+
         const errors: string[] = [];
 
-        if (!rawNo || isNaN(parsedNo) || parsedNo <= 0) {
-          errors.push('Kolom NO harus berupa angka positif');
-        }
         if (!rawPt) {
-          errors.push('NAMA PT kosong');
+          errors.push('Nama PT / Perusahaan wajib diisi');
         }
         if (!rawPejabat) {
-          errors.push('NAMA PEJABAT kosong');
+          errors.push('Nama Pejabat wajib diisi');
         }
 
         const ptKey = rawPt.toUpperCase();
         if (rawPt && seenInFile.has(ptKey)) {
-          errors.push('Duplikat NAMA PT di dalam file Excel yang sama');
+          errors.push('Duplikat Nama PT di dalam file Excel yang sama');
         }
         if (rawPt) {
           seenInFile.add(ptKey);
@@ -186,10 +271,16 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
 
         results.push({
           rowIndex: r + 1,
-          rawNo,
-          no: !isNaN(parsedNo) && parsedNo > 0 ? Math.floor(parsedNo) : null,
+          rawNo: rawNo || String(autoNo),
+          no: autoNo,
           nama_pt: rawPt,
           nama_pejabat: rawPejabat,
+          jabatan_pejabat: rawJabatan,
+          alamat: rawAlamat,
+          kota: rawKota,
+          kode_pos: rawKodePos,
+          telepon: rawTelepon,
+          email: rawEmail,
           isValid: errors.length === 0,
           errorReason: errors.length > 0 ? errors.join(', ') : null,
           existingCompany: existingMatch,
@@ -235,6 +326,12 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
                 no: row.no || row.existingCompany.no || 1,
                 nama_pt: row.nama_pt,
                 nama_pejabat: row.nama_pejabat,
+                jabatan_pejabat: row.jabatan_pejabat || row.existingCompany.jabatan_pejabat || '',
+                alamat: row.alamat || row.existingCompany.alamat || '',
+                kota: row.kota || row.existingCompany.kota || '',
+                kode_pos: row.kode_pos || row.existingCompany.kode_pos || '',
+                telepon: row.telepon || row.existingCompany.telepon || '',
+                email: row.email || row.existingCompany.email || '',
               },
               true
             );
@@ -251,12 +348,12 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
             no: row.no || 1,
             nama_pt: row.nama_pt,
             nama_pejabat: row.nama_pejabat,
-            jabatan_pejabat: '',
-            alamat: '',
-            kota: '',
-            kode_pos: '',
-            telepon: '',
-            email: '',
+            jabatan_pejabat: row.jabatan_pejabat || '',
+            alamat: row.alamat || '',
+            kota: row.kota || '',
+            kode_pos: row.kode_pos || '',
+            telepon: row.telepon || '',
+            email: row.email || '',
             logo: '',
           },
           false
@@ -267,11 +364,11 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
       setImportSuccessCount(importedCount);
       setParsedRows([]);
       showQuickPopup(
-        `${importedCount} Data Perusahaan berhasil diimport!`,
+        `${importedCount} Data Perusahaan Lengkap berhasil diimport ke Database!`,
         'success'
       );
     } catch {
-      setFileError('Terjadi kesalahan saat menyimpan data ke database cloud.');
+      setFileError('Terjadi kesalahan saat menyimpan data ke database.');
       showQuickPopup('Gagal mengimport data Excel', 'warning');
     } finally {
       setImporting(false);
@@ -284,69 +381,61 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">
-            Import Data Perusahaan (Excel)
+            Import Data Perusahaan (Excel Lengkap)
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Unduh template resmi .xlsx, isi daftar perusahaan, lalu periksa preview sebelum konfirmasi import
+            Unduh template lengkap 9 kolom, isi data perusahaan dan kontak pejabat, lalu verifikasi preview sebelum import
           </p>
         </div>
 
         <button
           type="button"
           onClick={handleDownloadTemplate}
-          className="min-h-[44px] px-4 py-2.5 rounded-xl bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 flex items-center gap-2 shadow-xs"
+          className="min-h-[44px] px-4 py-2.5 rounded-xl bg-emerald-700 text-white text-xs font-semibold hover:bg-emerald-800 flex items-center gap-2 shadow-xs transition"
         >
           <Download className="w-4 h-4" />
-          Download Template Excel (.xlsx)
+          Download Template Excel Lengkap (.xlsx)
         </button>
       </div>
 
       {/* Format Specification Card */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-3">
-        <h2 className="text-sm font-bold text-slate-900 dark:text-white">
-          Format Header Wajib Template Excel
-        </h2>
+        <div className="flex items-center gap-2">
+          <Building2 className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+            Format 9 Kolom Data Perusahaan Lengkap
+          </h2>
+        </div>
         <p className="text-xs text-slate-600 dark:text-slate-400">
-          File Excel (.xlsx) wajib memiliki 3 kolom utama berikut. Alamat dan detail lainnya dapat dilengkapi setelah import:
+          Template kini mencakup seluruh informasi mitra perusahaan: <strong>No Urut</strong>, <strong>Nama PT *</strong>, <strong>Nama Pejabat *</strong>, <strong>Jabatan Pejabat</strong>, <strong>Alamat Lengkap</strong>, <strong>Kota / Kabupaten</strong>, <strong>Kode Pos</strong>, <strong>Telepon</strong>, dan <strong>Email</strong>.
         </p>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-xs border-collapse border border-slate-200 dark:border-slate-700">
+          <table className="w-full text-[11px] border-collapse border border-slate-200 dark:border-slate-700 whitespace-nowrap">
             <thead>
               <tr className="bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold">
-                <th className="border border-slate-200 dark:border-slate-700 px-3 py-2 w-16 text-center">
-                  NO
-                </th>
-                <th className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-left">
-                  NAMA PT
-                </th>
-                <th className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-left">
-                  NAMA PEJABAT
-                </th>
+                <th className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-center">No Urut</th>
+                <th className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-left">Nama PT / Perusahaan *</th>
+                <th className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-left">Nama Pejabat *</th>
+                <th className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-left">Jabatan Pejabat</th>
+                <th className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-left">Alamat Lengkap</th>
+                <th className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-left">Kota / Kabupaten</th>
+                <th className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-left">Kode Pos</th>
+                <th className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-left">Telepon</th>
+                <th className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-left">Email</th>
               </tr>
             </thead>
             <tbody className="font-mono text-slate-700 dark:text-slate-300">
               <tr>
-                <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-center">
-                  1
-                </td>
-                <td className="border border-slate-200 dark:border-slate-700 px-3 py-2">
-                  PT. KANSAI PAINT INDONESIA
-                </td>
-                <td className="border border-slate-200 dark:border-slate-700 px-3 py-2">
-                  MUHAMAD RIDHO
-                </td>
-              </tr>
-              <tr>
-                <td className="border border-slate-200 dark:border-slate-700 px-3 py-2 text-center">
-                  2
-                </td>
-                <td className="border border-slate-200 dark:border-slate-700 px-3 py-2">
-                  PT. CONTOH INDONESIA
-                </td>
-                <td className="border border-slate-200 dark:border-slate-700 px-3 py-2">
-                  BUDI SANTOSO
-                </td>
+                <td className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-center font-bold">1</td>
+                <td className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 font-bold">PT. KANSAI PAINT INDONESIA</td>
+                <td className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5">MUHAMAD RIDHO</td>
+                <td className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5">General Manager</td>
+                <td className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5">Blok DD-7 &amp; DD-6 Kawasan Industri MM2100 Cikarang Barat</td>
+                <td className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5">Kab. Bekasi</td>
+                <td className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5">17847</td>
+                <td className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5">021-8980001</td>
+                <td className="border border-slate-200 dark:border-slate-700 px-2.5 py-1.5">info@kansaipaint.co.id</td>
               </tr>
             </tbody>
           </table>
@@ -395,7 +484,7 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
             <span className="font-semibold">
-              Berhasil mengimport {importSuccessCount} data perusahaan ke database cloud!
+              Berhasil mengimport {importSuccessCount} data perusahaan lengkap ke database!
             </span>
           </div>
           <button
@@ -403,7 +492,7 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
             onClick={onDone}
             className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-emerald-700 text-white font-semibold hover:bg-emerald-800"
           >
-            Lihat Data Perusahaan &rarr;
+            Lihat Database Perusahaan &rarr;
           </button>
         </div>
       )}
@@ -456,7 +545,7 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
           {duplicateRows.length > 0 && (
             <div className="p-4 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 space-y-2.5">
               <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
-                 ditemukan {duplicateRows.length} Nama Perusahaan yang sudah ada di database. Pilih tindakan:
+                Ditemukan {duplicateRows.length} Nama Perusahaan yang sudah ada di database. Pilih tindakan:
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button
@@ -479,7 +568,7 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
                       : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-300'
                   }`}
                 >
-                  2. Update Data Pejabat/No
+                  2. Update Data Lengkap
                 </button>
                 <button
                   type="button"
@@ -497,22 +586,20 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
           )}
 
           {/* Preview Table */}
-          <div className="overflow-x-auto max-h-80 border border-slate-200 dark:border-slate-800 rounded-xl">
-            <table className="w-full text-xs border-collapse">
-              <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0">
-                <tr className="text-left text-slate-700 dark:text-slate-200">
-                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700 w-16">
-                    NO
-                  </th>
-                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
-                    NAMA PT
-                  </th>
-                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
-                    NAMA PEJABAT
-                  </th>
-                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">
-                    STATUS VALIDASI
-                  </th>
+          <div className="overflow-x-auto max-h-96 border border-slate-200 dark:border-slate-800 rounded-xl">
+            <table className="w-full text-xs border-collapse whitespace-nowrap">
+              <thead className="bg-slate-100 dark:bg-slate-800 sticky top-0 z-10">
+                <tr className="text-left text-slate-700 dark:text-slate-200 font-bold">
+                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">No Urut</th>
+                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">Nama PT / Perusahaan</th>
+                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">Nama Pejabat</th>
+                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">Jabatan</th>
+                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">Alamat Lengkap</th>
+                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">Kota / Kab</th>
+                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">Kode Pos</th>
+                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">Telepon</th>
+                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">Email</th>
+                  <th className="px-3 py-2.5 border-b border-slate-200 dark:border-slate-700">Status Validasi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -527,7 +614,7 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
                         : ''
                     }
                   >
-                    <td className="px-3 py-2 font-mono tabular-nums">
+                    <td className="px-3 py-2 font-mono tabular-nums text-center font-bold">
                       {r.rawNo || '-'}
                     </td>
                     <td className="px-3 py-2 font-semibold text-slate-900 dark:text-white">
@@ -536,9 +623,27 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
                     <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
                       {r.nama_pejabat || '-'}
                     </td>
+                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                      {r.jabatan_pejabat || '-'}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400 max-w-xs truncate" title={r.alamat}>
+                      {r.alamat || '-'}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                      {r.kota || '-'}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-slate-600 dark:text-slate-400">
+                      {r.kode_pos || '-'}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-slate-600 dark:text-slate-400">
+                      {r.telepon || '-'}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-slate-600 dark:text-slate-400">
+                      {r.email || '-'}
+                    </td>
                     <td className="px-3 py-2">
                       {!r.isValid ? (
-                        <span className="text-red-600 font-medium">
+                        <span className="text-red-600 font-semibold">
                           Error: {r.errorReason}
                         </span>
                       ) : r.existingCompany ? (
@@ -552,8 +657,8 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
                           )
                         </span>
                       ) : (
-                        <span className="text-emerald-700 dark:text-emerald-400 font-medium">
-                          Valid (Siap diimport)
+                        <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
+                          ✓ Valid (Siap diimport)
                         </span>
                       )}
                     </td>
@@ -576,14 +681,14 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
               type="button"
               disabled={importing || validRows.length === 0}
               onClick={handleConfirmImport}
-              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-blue-900 text-white text-xs font-semibold hover:bg-blue-800 flex items-center gap-2 disabled:opacity-50"
+              className="min-h-[44px] px-5 py-2.5 rounded-xl bg-blue-900 text-white text-xs font-semibold hover:bg-blue-800 flex items-center gap-2 disabled:opacity-50 shadow-xs"
             >
               {importing ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <CheckCircle2 className="w-4 h-4" />
               )}
-              Konfirmasi &amp; Import {validRows.length} Data Valid ke Database
+              Konfirmasi &amp; Import {validRows.length} Data Lengkap ke Database
             </button>
           </div>
         </div>

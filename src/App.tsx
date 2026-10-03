@@ -58,7 +58,11 @@ import {
   NavigationTab,
   SyncStatus,
 } from './types';
-import { generateNomorBast, generateSafeId } from './utils/formatters';
+import {
+  generateNomorBast,
+  generateSafeId,
+  getUniqueNextNomorBast,
+} from './utils/formatters';
 import {
   QuickPopupItem,
   showQuickPopup,
@@ -296,9 +300,19 @@ export default function App() {
     await saveBastWithItems(authUser.uid, bastData, itemsData, existingIds);
 
     if (incrementCounter) {
+      const existingNumbers = new Set(
+        bastDocuments.map((d) => d.nomor_bast.trim().toUpperCase())
+      );
+      existingNumbers.add(bastData.nomor_bast.trim().toUpperCase());
+      const { nextCounter } = getUniqueNextNomorBast(
+        settings.auto_number_format,
+        (settings.auto_number_counter || 1) + 1,
+        bastData.tanggal_bast,
+        existingNumbers
+      );
       const nextSettings: AppSettings = {
         ...settings,
-        auto_number_counter: (settings.auto_number_counter || 1) + 1,
+        auto_number_counter: nextCounter,
       };
       setSettings(nextSettings);
       await saveUserSettings(authUser.uid, nextSettings);
@@ -314,11 +328,16 @@ export default function App() {
     if (!authUser) return;
     setSyncStatus('saving');
     const newBastId = generateSafeId('bast');
-    const nextCounter = (settings.auto_number_counter || 1) + 1;
-    const newNomor = generateNomorBast(
+
+    // Guarantee that duplicating a BAST never uses an already existing number
+    const existingNumbers = new Set(
+      bastDocuments.map((d) => d.nomor_bast.trim().toUpperCase())
+    );
+    const { nomor: newNomor, nextCounter } = getUniqueNextNomorBast(
       settings.auto_number_format,
-      nextCounter,
-      sourceBast.tanggal_bast
+      (settings.auto_number_counter || 1) + 1,
+      sourceBast.tanggal_bast,
+      existingNumbers
     );
 
     const sourceItems = bastItems

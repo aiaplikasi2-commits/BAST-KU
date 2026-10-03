@@ -35,6 +35,7 @@ import {
 import { downloadBastPdf, shareBastPdf } from '../utils/pdfGenerator';
 import { showQuickPopup } from '../utils/quickPopup';
 import { BastPreviewModal } from './BastPreviewModal';
+import { RekapBastModal } from './RekapBastModal';
 
 interface DashboardAndBastListViewProps {
   mode: 'dashboard' | 'list';
@@ -76,6 +77,7 @@ export const DashboardAndBastListView: React.FC<
   const [previewBast, setPreviewBast] = useState<BastDocument | null>(null);
   const [deleteConfirmBast, setDeleteConfirmBast] =
     useState<BastDocument | null>(null);
+  const [showRekapModal, setShowRekapModal] = useState<boolean>(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const now = new Date();
@@ -261,6 +263,16 @@ export const DashboardAndBastListView: React.FC<
                 >
                   <FilePlus2 className="w-4 h-4 text-blue-800" />
                   + Buat BAST Baru
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowRekapModal(true)}
+                  className="min-h-[46px] px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs sm:text-sm font-extrabold flex items-center gap-2 shadow-sm transition active:scale-[0.99]"
+                  title="Unduh Rekap BAST Keseluruhan & Rincian dalam bentuk PDF resmi A4"
+                >
+                  <Download className="w-4 h-4 text-slate-950" />
+                  Download Rekap PDF
                 </button>
 
                 {onOpenImportExcel && (
@@ -518,14 +530,25 @@ export const DashboardAndBastListView: React.FC<
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={onCreateNew}
-            className="min-h-[46px] px-5 py-2.5 rounded-xl bg-blue-900 text-white text-sm font-semibold hover:bg-blue-800 active:scale-[0.99] flex items-center gap-2 shadow-xs transition"
-          >
-            <FilePlus2 className="w-4 h-4" />
-            + Buat BAST
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setShowRekapModal(true)}
+              className="min-h-[46px] px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs sm:text-sm font-bold flex items-center gap-2 shadow-xs transition active:scale-[0.99]"
+              title="Unduh Rekap BAST Keseluruhan & Rincian dalam bentuk PDF resmi A4"
+            >
+              <Download className="w-4 h-4 text-slate-950" />
+              Download Rekap PDF
+            </button>
+            <button
+              type="button"
+              onClick={onCreateNew}
+              className="min-h-[46px] px-5 py-2.5 rounded-xl bg-blue-900 text-white text-sm font-semibold hover:bg-blue-800 active:scale-[0.99] flex items-center gap-2 shadow-xs transition"
+            >
+              <FilePlus2 className="w-4 h-4" />
+              + Buat BAST
+            </button>
+          </div>
         </div>
       )}
 
@@ -832,6 +855,16 @@ export const DashboardAndBastListView: React.FC<
           </div>
         </div>
       )}
+
+      {/* REKAP BAST KESELURUHAN & RINCIAN PDF MODAL */}
+      <RekapBastModal
+        isOpen={showRekapModal}
+        onClose={() => setShowRekapModal(false)}
+        allBastDocuments={bastDocuments}
+        filteredBastDocuments={filteredDocs}
+        allItems={bastItems}
+        settings={settings}
+      />
     </div>
   );
 };

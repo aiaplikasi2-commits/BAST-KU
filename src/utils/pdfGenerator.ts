@@ -582,3 +582,581 @@ export async function shareBastPdf(
   doc.save(filename);
   return 'downloaded';
 }
+
+// ============================================================================
+// REKAP BAST KESELURUHAN & RINCIAN BARANG / JASA (PDF REPORT GENERATOR)
+// ============================================================================
+
+export interface RekapPdfOptions {
+  title?: string;
+  subtitle?: string;
+  periodeLabel?: string;
+  includeItemDetails?: boolean;
+}
+
+/**
+ * Generates an executive multi-page formal PDF report containing:
+ * 1. Official Kop Surat with company emblem/logo and details
+ * 2. Executive summary / KPI metrics of all BASTs
+ * 3. Master table of all BAST documents (Nomor BAST, Tanggal, Klien/PT, Pejabat, PO, Status)
+ * 4. Detailed itemized breakdown of every line item (Rincian Barang & Jasa) per BAST
+ * 5. Official sign-off block with signature and stamp
+ */
+export async function generateRekapBastPdfDocument(
+  bastDocs: BastDocument[],
+  allItems: BastItem[],
+  settings: AppSettings,
+  options: RekapPdfOptions = {}
+): Promise<jsPDF> {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = 210;
+  const pageHeight = 297;
+  const marginX = 18;
+  const contentWidth = pageWidth - marginX * 2; // 174mm
+
+  let cursorY = 12;
+
+  // ---------------------------------------------------------------------------
+  // 1. KOP SURAT RESMI (SESUAI GAMBAR REFERENSI PERUSAHAAN)
+  // ---------------------------------------------------------------------------
+  const companyName =
+    settings.nama_perusahaan?.trim() || 'CV.MULIA TEKHNIK ABADI';
+  const companyAddress =
+    settings.alamat?.trim() ||
+    'Jl. Letda Nasir No.58 Desa Cikeas Udik Kecamatan Gunung Putri Kab. Bogor Kode Pos 16966';
+  const companyEmail = settings.email?.trim();
+  const companyPhone = settings.telepon?.trim();
+
+  const logoSrc =
+    settings.logo?.trim() || getCorporateEmblemDataUrl(companyName);
+  const preparedLogo = await prepareImageForPdf(logoSrc);
+
+  const headerCenterX = pageWidth / 2 + 10;
+  const maxTextWidth = 140;
+
+  // Header 1 (Extra bold font simulation)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.setTextColor(59, 110, 140);
+  const upperCompanyName = companyName.toUpperCase();
+  const titleY = cursorY + 6;
+  doc.text(upperCompanyName, headerCenterX, titleY, { align: 'center' });
+  doc.text(upperCompanyName, headerCenterX + 0.2, titleY, { align: 'center' });
+  doc.text(upperCompanyName, headerCenterX - 0.2, titleY, { align: 'center' });
+
+  // Address
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(51, 65, 85);
+  const rawBalancedLines = formatKopAddressLines(companyAddress);
+  let headerLineY = titleY + 5.5;
+
+  for (const rawLine of rawBalancedLines) {
+    const wrapped = doc.splitTextToSize(rawLine, maxTextWidth);
+    for (const subLine of wrapped) {
+      doc.text(subLine, headerCenterX, headerLineY, { align: 'center' });
+      headerLineY += 4.2;
+    }
+  }
+
+  // Email line
+  if (companyEmail) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    const prefixStr = 'email. ';
+    const fullEmailLine = `${prefixStr}${companyEmail}`;
+    const fullW = doc.getTextWidth(fullEmailLine);
+    const prefixW = doc.getTextWidth(prefixStr);
+    const startX = headerCenterX - fullW / 2;
+
+    doc.setTextColor(60, 72, 88);
+    doc.text(prefixStr, startX, headerLineY);
+    doc.setTextColor(59, 110, 140);
+    doc.text(companyEmail, startX + prefixW, headerLineY);
+
+    doc.setDrawColor(59, 110, 140);
+    doc.setLineWidth(0.3);
+    doc.line(
+      startX + prefixW,
+      headerLineY + 0.7,
+      startX + fullW,
+      headerLineY + 0.7
+    );
+    headerLineY += 4.2;
+  }
+
+  // Phone line
+  if (companyPhone) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(51, 65, 85);
+    doc.text(`Tlp ${companyPhone}`, headerCenterX, headerLineY, {
+      align: 'center',
+    });
+    headerLineY += 4.0;
+  }
+
+  // Logo draw
+  let drawLogoW = 0;
+  let drawLogoH = 0;
+  if (preparedLogo) {
+    const logoScale = Math.max(
+      0.4,
+      Math.min(2.0, (settings.logo_scale || 100) / 100)
+    );
+    const baseMaxW = 42 * logoScale;
+    const baseMaxH = 17 * logoScale;
+    const ratio = Math.min(
+      baseMaxW / preparedLogo.width,
+      baseMaxH / preparedLogo.height
+    );
+    drawLogoW = preparedLogo.width * ratio;
+    drawLogoH = preparedLogo.height * ratio;
+  }
+
+  const lineY = Math.max(
+    cursorY + 26,
+    headerLineY + 1.5,
+    cursorY + drawLogoH + 3
+  );
+
+  if (preparedLogo && drawLogoW > 0 && drawLogoH > 0) {
+    const offsetXmm = (settings.logo_x || 0) * 0.265;
+    const offsetYmm = (settings.logo_y || 0) * 0.265;
+    const logoX = Math.max(
+      2,
+      Math.min(pageWidth - drawLogoW - 2, marginX + offsetXmm)
+    );
+    const logoY = Math.max(2, lineY - drawLogoH - 2.2 + offsetYmm);
+    doc.addImage(
+      preparedLogo.dataUrl,
+      'PNG',
+      logoX,
+      logoY,
+      drawLogoW,
+      drawLogoH
+    );
+  }
+
+  cursorY = lineY;
+
+  // Garis Kop
+  doc.setDrawColor(65, 75, 88);
+  doc.setLineWidth(0.25);
+  doc.line(marginX, cursorY, pageWidth - marginX, cursorY);
+  doc.setLineWidth(0.75);
+  doc.line(marginX, cursorY + 0.85, pageWidth - marginX, cursorY + 0.85);
+  doc.setLineWidth(0.25);
+  doc.line(marginX, cursorY + 1.7, pageWidth - marginX, cursorY + 1.7);
+
+  cursorY += 7.5;
+
+  // ---------------------------------------------------------------------------
+  // 2. REPORT TITLE & EXECUTIVE METADATA
+  // ---------------------------------------------------------------------------
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42);
+  const mainTitle =
+    options.title || 'REKAPITULASI DOKUMEN BERITA ACARA SERAH TERIMA (BAST)';
+  doc.text(mainTitle, pageWidth / 2, cursorY, { align: 'center' });
+
+  const titleW = doc.getTextWidth(mainTitle);
+  doc.setDrawColor(59, 110, 140);
+  doc.setLineWidth(0.5);
+  doc.line(
+    pageWidth / 2 - titleW / 2,
+    cursorY + 1.0,
+    pageWidth / 2 + titleW / 2,
+    cursorY + 1.0
+  );
+
+  cursorY += 5.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(71, 85, 105);
+  const subTitle =
+    options.subtitle ||
+    'Laporan Rekapitulasi Keseluruhan BAST Beserta Rincian Barang & Jasa';
+  doc.text(subTitle, pageWidth / 2, cursorY, { align: 'center' });
+
+  cursorY += 6.5;
+
+  // Metrics Bar / Summary Bento
+  const now = new Date();
+  const todayIso = now.toISOString().slice(0, 10);
+  const selesaiCount = bastDocs.filter((d) => d.status === 'Selesai').length;
+  const draftCount = bastDocs.filter((d) => d.status === 'Draft').length;
+
+  const totalItemsCount = allItems.filter((it) =>
+    bastDocs.some((d) => d.id === it.bast_id)
+  ).length;
+
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(marginX, cursorY, contentWidth, 14, 2, 2, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(
+    `Cakupan: ${options.periodeLabel || 'Semua Dokumen'}`,
+    marginX + 4,
+    cursorY + 5.5
+  );
+  doc.text(
+    `Total BAST: ${bastDocs.length} Dokumen (${selesaiCount} Selesai, ${draftCount} Draft)`,
+    marginX + 4,
+    cursorY + 10.5
+  );
+
+  doc.setFont('helvetica', 'normal');
+  doc.text(
+    `Total Rincian Item: ${totalItemsCount} Baris`,
+    pageWidth - marginX - 4,
+    cursorY + 5.5,
+    { align: 'right' }
+  );
+  doc.text(
+    `Tanggal Cetak: ${formatTanggalIndonesia(todayIso)}`,
+    pageWidth - marginX - 4,
+    cursorY + 10.5,
+    { align: 'right' }
+  );
+
+  cursorY += 19;
+
+  // ---------------------------------------------------------------------------
+  // 3. TABEL 1: MASTER LIST OF BAST DOCUMENTS
+  // ---------------------------------------------------------------------------
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text('I. DAFTAR DOKUMEN BAST', marginX, cursorY);
+  cursorY += 2;
+
+  const masterTableRows = bastDocs.map((bast, index) => [
+    String(index + 1),
+    bast.nomor_bast || '-',
+    formatTanggalIndonesia(bast.tanggal_bast),
+    bast.pihak_pertama_pt || '-',
+    bast.pihak_pertama_nama || '-',
+    bast.nomor_po || '-',
+    bast.status || 'Draft',
+  ]);
+
+  autoTable(doc, {
+    startY: cursorY + 1.5,
+    margin: { left: marginX, right: marginX },
+    head: [
+      [
+        'NO',
+        'NOMOR BAST',
+        'TANGGAL',
+        'PIHAK PERTAMA (KLIEN)',
+        'PEJABAT',
+        'NOMOR PO',
+        'STATUS',
+      ],
+    ],
+    body: masterTableRows.length > 0 ? masterTableRows : [['-', 'Belum ada dokumen BAST', '-', '-', '-', '-', '-']],
+    theme: 'grid',
+    styles: {
+      font: 'helvetica',
+      fontSize: 8,
+      textColor: [15, 23, 42],
+      lineColor: [203, 213, 225],
+      lineWidth: 0.25,
+      cellPadding: { top: 2, right: 2.5, bottom: 2, left: 2.5 },
+      valign: 'middle',
+      overflow: 'linebreak',
+    },
+    headStyles: {
+      fillColor: [59, 110, 140], // Brand Steel Blue
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      halign: 'center',
+      minCellHeight: 8,
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+    columnStyles: {
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 38, halign: 'left', fontStyle: 'bold' },
+      2: { cellWidth: 26, halign: 'center' },
+      3: { cellWidth: 44, halign: 'left' },
+      4: { cellWidth: 28, halign: 'left' },
+      5: { cellWidth: 26, halign: 'center' },
+      6: { cellWidth: 18, halign: 'center', fontStyle: 'bold' },
+    },
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index === 6) {
+        if (data.cell.raw === 'Selesai') {
+          data.cell.styles.textColor = [16, 122, 60];
+        } else if (data.cell.raw === 'Draft') {
+          data.cell.styles.textColor = [194, 98, 10];
+        }
+      }
+    },
+  });
+
+  const masterTableFinalY =
+    (doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable
+      ?.finalY || cursorY + 40;
+  cursorY = masterTableFinalY + 10;
+
+  // ---------------------------------------------------------------------------
+  // 4. TABEL 2 / SEKSI: RINCIAN BARANG & JASA LENGKAP TIAP BAST
+  // ---------------------------------------------------------------------------
+  const includeDetails = options.includeItemDetails !== false;
+
+  if (includeDetails && bastDocs.length > 0) {
+    // If not enough room for section header, start on a fresh page
+    if (cursorY + 30 > pageHeight - 20) {
+      doc.addPage();
+      cursorY = 18;
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text('II. RINCIAN BARANG & JASA LENGKAP TIAP BAST', marginX, cursorY);
+    cursorY += 5;
+
+    // Map items by BAST ID
+    const itemsByBast = new Map<string, BastItem[]>();
+    for (const item of allItems) {
+      const bId = item.bast_id;
+      if (!itemsByBast.has(bId)) {
+        itemsByBast.set(bId, []);
+      }
+      itemsByBast.get(bId)!.push(item);
+    }
+
+    for (let bIdx = 0; bIdx < bastDocs.length; bIdx++) {
+      const bast = bastDocs[bIdx];
+      const bastItemsList = (itemsByBast.get(bast.id) || []).sort(
+        (a, b) => a.urutan - b.urutan || a.nomor - b.nomor
+      );
+
+      // Check space for BAST box header + table
+      if (cursorY + 32 > pageHeight - 20) {
+        doc.addPage();
+        cursorY = 18;
+      }
+
+      // Small card header for this BAST
+      doc.setFillColor(241, 245, 249);
+      doc.setDrawColor(203, 213, 225);
+      doc.roundedRect(marginX, cursorY, contentWidth, 10, 1.5, 1.5, 'FD');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text(
+        `#${bIdx + 1}. BAST: ${bast.nomor_bast} — ${bast.pihak_pertama_pt}`,
+        marginX + 3,
+        cursorY + 4.2
+      );
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(71, 85, 105);
+      const detailSubtitle = `Tgl: ${formatTanggalIndonesia(
+        bast.tanggal_bast
+      )}  |  PO: ${bast.nomor_po || '-'}  |  Status: ${bast.status}  |  Pelaksana: ${
+        bast.pihak_kedua_nama || '-'
+      }`;
+      doc.text(detailSubtitle, marginX + 3, cursorY + 8.2);
+
+      if (bast.deskripsi_pekerjaan) {
+        doc.setFont('helvetica', 'italic');
+        doc.text(
+          `Pekerjaan: ${bast.deskripsi_pekerjaan.slice(0, 75)}`,
+          pageWidth - marginX - 3,
+          cursorY + 6,
+          { align: 'right' }
+        );
+      }
+
+      cursorY += 11.5;
+
+      const itemRows =
+        bastItemsList.length > 0
+          ? bastItemsList.map((it, idx) => [
+              String(idx + 1),
+              it.nama_barang_jasa || '-',
+              it.keterangan || 'Sesuai',
+            ])
+          : [['-', 'Tidak ada rincian barang/jasa tercatat', '-']];
+
+      autoTable(doc, {
+        startY: cursorY,
+        margin: { left: marginX + 4, right: marginX + 4 },
+        head: [['NO', 'NAMA BARANG / JASA & PEKERJAAN', 'KETERANGAN']],
+        body: itemRows,
+        theme: 'plain',
+        styles: {
+          font: 'helvetica',
+          fontSize: 7.5,
+          textColor: [30, 41, 59],
+          lineColor: [226, 232, 240],
+          lineWidth: 0.2,
+          cellPadding: { top: 1.8, right: 2, bottom: 1.8, left: 2 },
+          overflow: 'linebreak',
+        },
+        headStyles: {
+          fillColor: [226, 232, 240],
+          textColor: [51, 65, 85],
+          fontStyle: 'bold',
+          halign: 'center',
+          minCellHeight: 6,
+        },
+        columnStyles: {
+          0: { cellWidth: 10, halign: 'center' },
+          1: { cellWidth: 120, halign: 'left' },
+          2: { cellWidth: 36, halign: 'center', fontStyle: 'italic' },
+        },
+      });
+
+      const itemsFinalY =
+        (doc as unknown as { lastAutoTable?: { finalY?: number } })
+          .lastAutoTable?.finalY || cursorY + 20;
+      cursorY = itemsFinalY + 6;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 5. OFFICIAL SIGN-OFF BLOCK ON FINAL PAGE
+  // ---------------------------------------------------------------------------
+  const requiredSigBlockHeight = 48;
+  if (cursorY + requiredSigBlockHeight > pageHeight - 16) {
+    doc.addPage();
+    cursorY = 20;
+  }
+
+  cursorY += 4;
+  const kotaText = settings.kota?.trim() || 'Bogor';
+  const sigX = pageWidth - marginX - 35;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`${kotaText}, ${formatTanggalIndonesia(todayIso)}`, sigX, cursorY, {
+    align: 'center',
+  });
+  cursorY += 4.5;
+  doc.text('Mengetahui / Penanggung Jawab', sigX, cursorY, {
+    align: 'center',
+  });
+  cursorY += 4.0;
+  doc.setFont('helvetica', 'bold');
+  doc.text(companyName, sigX, cursorY, { align: 'center' });
+
+  // Signature image & stamp if available
+  const sigSrc = settings.signature_party_2 || settings.signature_party_1;
+  const stempelSrc = settings.stempel;
+  const [prepSig, prepStempel] = await Promise.all([
+    prepareImageForPdf(sigSrc),
+    prepareImageForPdf(stempelSrc),
+  ]);
+
+  const sigBoxTopY = cursorY + 1.5;
+  const sigBoxHeight = 18;
+
+  if (prepSig) {
+    const maxW = 36;
+    const maxH = 16;
+    const ratio = Math.min(maxW / prepSig.width, maxH / prepSig.height);
+    const w = prepSig.width * ratio;
+    const h = prepSig.height * ratio;
+    doc.addImage(
+      prepSig.dataUrl,
+      'PNG',
+      sigX - w / 2,
+      sigBoxTopY + (sigBoxHeight - h) / 2,
+      w,
+      h
+    );
+  }
+
+  if (prepStempel) {
+    const maxW = 28;
+    const maxH = 18;
+    const ratio = Math.min(maxW / prepStempel.width, maxH / prepStempel.height);
+    const w = prepStempel.width * ratio;
+    const h = prepStempel.height * ratio;
+    doc.addImage(
+      prepStempel.dataUrl,
+      'PNG',
+      sigX - w / 2 + 8,
+      sigBoxTopY + (sigBoxHeight - h) / 2 - 1,
+      w,
+      h
+    );
+  }
+
+  cursorY += sigBoxHeight + 3;
+  const signerName =
+    settings.default_pihak_kedua_nama?.trim() ||
+    settings.nama_perusahaan ||
+    'Pimpinan Perusahaan';
+  doc.setFont('helvetica', 'bold');
+  doc.text(`( ${signerName} )`, sigX, cursorY, { align: 'center' });
+
+  // ---------------------------------------------------------------------------
+  // 6. PAGE NUMBERS & OFFICIAL FOOTER ON ALL PAGES
+  // ---------------------------------------------------------------------------
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(148, 163, 184);
+
+    // Bottom horizontal rule
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.2);
+    doc.line(marginX, pageHeight - 10, pageWidth - marginX, pageHeight - 10);
+
+    doc.text(
+      `${companyName} · Rekapitulasi Berita Acara Serah Terima (BAST)`,
+      marginX,
+      pageHeight - 6.5
+    );
+    doc.text(`Halaman ${p} dari ${totalPages}`, pageWidth - marginX, pageHeight - 6.5, {
+      align: 'right',
+    });
+  }
+
+  return doc;
+}
+
+/**
+ * Convenience helper to download the Rekap BAST PDF directly with automatic filename
+ */
+export async function downloadRekapBastPdf(
+  bastDocs: BastDocument[],
+  allItems: BastItem[],
+  settings: AppSettings,
+  options: RekapPdfOptions = {}
+): Promise<void> {
+  const doc = await generateRekapBastPdfDocument(
+    bastDocs,
+    allItems,
+    settings,
+    options
+  );
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10);
+  const filename = `Rekap_BAST_Keseluruhan_${dateStr}.pdf`;
+  doc.save(filename);
+}
+

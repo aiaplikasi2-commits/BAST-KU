@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import {
   Building2,
+  Download,
   Edit3,
+  FileDown,
   FileSpreadsheet,
   Loader2,
   MapPin,
@@ -13,6 +15,10 @@ import {
   X,
 } from 'lucide-react';
 import { Company } from '../types';
+import {
+  downloadCompanyExcelTemplate,
+  exportCompaniesToExcel,
+} from '../utils/excelCompanyHelper';
 import { generateSafeId } from '../utils/formatters';
 import { showQuickPopup } from '../utils/quickPopup';
 
@@ -166,11 +172,29 @@ export const CompaniesView: React.FC<CompaniesViewProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={downloadCompanyExcelTemplate}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 flex items-center gap-1.5 shadow-2xs"
+            title="Download Template Excel Lengkap 9 Kolom"
+          >
+            <Download className="w-4 h-4 text-blue-600" />
+            Template Excel
+          </button>
+          <button
+            type="button"
+            onClick={() => exportCompaniesToExcel(companies)}
+            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 flex items-center gap-1.5 shadow-2xs"
+            title="Export Seluruh Data Perusahaan ke Excel (.xlsx)"
+          >
+            <FileDown className="w-4 h-4 text-amber-600" />
+            Export Excel
+          </button>
           <button
             type="button"
             onClick={onOpenImportExcel}
-            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 flex items-center gap-1.5"
+            className="min-h-[44px] px-3.5 py-2 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/30 text-xs font-semibold text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 flex items-center gap-1.5"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             Import Excel

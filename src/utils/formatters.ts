@@ -183,6 +183,37 @@ export function generateNomorBast(
 }
 
 /**
+ * Computes the next unique BAST number that is guaranteed not to exist in the given list of existing numbers.
+ * Prevents any BAST number from being used twice.
+ */
+export function getUniqueNextNomorBast(
+  formatPattern: string,
+  initialCounter: number,
+  dateStr: string,
+  existingBastNumbers: string[] | Set<string>
+): { nomor: string; nextCounter: number } {
+  let counter = Math.max(1, initialCounter || 1);
+  const existingSet = new Set<string>();
+  if (Array.isArray(existingBastNumbers)) {
+    existingBastNumbers.forEach((s) => {
+      if (s) existingSet.add(s.trim().toUpperCase());
+    });
+  } else if (existingBastNumbers instanceof Set) {
+    existingBastNumbers.forEach((s) => {
+      if (s) existingSet.add(s.trim().toUpperCase());
+    });
+  }
+  let candidate = generateNomorBast(formatPattern, counter, dateStr);
+  let attempts = 0;
+  while (existingSet.has(candidate.trim().toUpperCase()) && attempts < 10000) {
+    counter++;
+    candidate = generateNomorBast(formatPattern, counter, dateStr);
+    attempts++;
+  }
+  return { nomor: candidate, nextCounter: counter };
+}
+
+/**
  * Automatically converts Google Drive sharing links into direct image URLs.
  */
 export function convertGoogleDriveUrl(inputUrl: string): string {

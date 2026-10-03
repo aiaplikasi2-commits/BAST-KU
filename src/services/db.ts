@@ -113,6 +113,7 @@ export function getDefaultSettings(uid: string, userEmail = ''): AppSettings {
 
 // LocalStorage Cache & Reactive Bus for Instant Offline Support per isolated UID
 const CACHE_PREFIX = 'bast_user_isolated_v2_';
+const DELETED_IDS_PREFIX = 'bast_deleted_ids_v1_';
 
 export interface LocalUserCache {
   companies: Company[];
@@ -124,6 +125,40 @@ export interface LocalUserCache {
 
 type CacheListener = (cache: LocalUserCache) => void;
 const cacheListeners = new Map<string, Set<CacheListener>>();
+
+export function getDeletedIds(uid: string): Set<string> {
+  const safeUid = sanitizeId(uid);
+  try {
+    const raw = localStorage.getItem(`${DELETED_IDS_PREFIX}${safeUid}`);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set();
+}
+
+export function addDeletedId(uid: string, id: string): void {
+  const safeUid = sanitizeId(uid);
+  const set = getDeletedIds(safeUid);
+  set.add(id);
+  try {
+    localStorage.setItem(
+      `${DELETED_IDS_PREFIX}${safeUid}`,
+      JSON.stringify(Array.from(set))
+    );
+  } catch {}
+}
+
+export function removeDeletedId(uid: string, id: string): void {
+  const safeUid = sanitizeId(uid);
+  const set = getDeletedIds(safeUid);
+  if (set.delete(id)) {
+    try {
+      localStorage.setItem(
+        `${DELETED_IDS_PREFIX}${safeUid}`,
+        JSON.stringify(Array.from(set))
+      );
+    } catch {}
+  }
+}
 
 function emitCacheUpdate(uid: string, cache: LocalUserCache) {
   const set = cacheListeners.get(uid);
@@ -685,7 +720,10 @@ export async function saveBastWithItems(
     updated_at: nowIso,
   }));
 
-  // Immediately update local cache
+  // Remove from deleted tracking if previously deleted
+  removeDeletedId(safeUid, safeBastId);
+
+  // Immediately update local cache so user never experiences data loss
   const currentCache = loadLocalCache(safeUid);
   const nextBastDocs = [
     ...currentCache.bast_documents.filter((d) => d.id !== safeBastId),
@@ -731,8 +769,8 @@ export async function saveBastWithItems(
   };
 
   try {
-    const existingSnap = await getDoc(bastRef);
-    if (!existingSnap.exists()) {
+    const existingSnap = await getDoc(bastRef).catch(() => null);
+    if (!existingSnap || !existingSnap.exists()) {
       await setDoc(bastRef, {
         id: safeBastId,
         user_id: safeUid,
@@ -740,20 +778,30 @@ export async function saveBastWithItems(
         created_at: serverTimestamp(),
       });
     } else {
-      try {
-        await updateDoc(bastRef, mutableBastFields);
-      } catch {
-        await deleteDoc(bastRef);
-        await setDoc(bastRef, {
+      await setDoc(
+        bastRef,
+        {
           id: safeBastId,
           user_id: safeUid,
           ...mutableBastFields,
-          created_at: serverTimestamp(),
-        });
-      }
+        },
+        { merge: true }
+      );
     }
-  } catch (error) {
-    console.warn('Cloud BAST sync warning (saved locally):', bastPath, error);
+  } catch {
+    try {
+      await setDoc(
+        bastRef,
+        {
+          id: safeBastId,
+          user_id: safeUid,
+          ...mutableBastFields,
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      console.warn('Cloud BAST sync warning (saved locally):', bastPath, error);
+    }
   }
 
   const keptIds = new Set<string>();
@@ -771,21 +819,8 @@ export async function saveBastWithItems(
     };
 
     try {
-      const snap = await getDoc(itemRef);
-      if (snap.exists()) {
-        try {
-          await updateDoc(itemRef, itemMutable);
-        } catch {
-          await deleteDoc(itemRef);
-          await setDoc(itemRef, {
-            id: item.id,
-            user_id: safeUid,
-            bast_id: safeBastId,
-            ...itemMutable,
-            created_at: serverTimestamp(),
-          });
-        }
-      } else {
+      const snap = await getDoc(itemRef).catch(() => null);
+      if (!snap || !snap.exists()) {
         await setDoc(itemRef, {
           id: item.id,
           user_id: safeUid,
@@ -793,9 +828,33 @@ export async function saveBastWithItems(
           ...itemMutable,
           created_at: serverTimestamp(),
         });
+      } else {
+        await setDoc(
+          itemRef,
+          {
+            id: item.id,
+            user_id: safeUid,
+            bast_id: safeBastId,
+            ...itemMutable,
+          },
+          { merge: true }
+        );
       }
-    } catch (error) {
-      console.warn('Cloud item sync warning (saved locally):', itemPath, error);
+    } catch {
+      try {
+        await setDoc(
+          itemRef,
+          {
+            id: item.id,
+            user_id: safeUid,
+            bast_id: safeBastId,
+            ...itemMutable,
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        console.warn('Cloud item sync warning (saved locally):', itemPath, error);
+      }
     }
   }
 
@@ -820,6 +879,9 @@ export async function deleteBastWithItems(
 ): Promise<void> {
   const safeUid = sanitizeId(uid);
   const safeBastId = sanitizeId(bastId);
+
+  // Register in deleted list to avoid resurrection from lagging snapshots
+  addDeletedId(safeUid, safeBastId);
 
   const currentCache = loadLocalCache(safeUid);
   saveLocalCache(safeUid, {
@@ -887,7 +949,7 @@ export function subscribeUserData(
   const unsubCompanies = onSnapshot(
     qCompanies,
     (snap) => {
-      const list: Company[] = snap.docs
+      const remoteList: Company[] = snap.docs
         .map((d) => {
           const data = d.data();
           return {
@@ -909,8 +971,19 @@ export function subscribeUserData(
         })
         .filter((c) => c.user_id === safeUid);
 
-      list.sort((a, b) => a.no - b.no || a.nama_pt.localeCompare(b.nama_pt));
-      saveLocalCache(safeUid, { companies: list });
+      const currentCache = loadLocalCache(safeUid);
+      const remoteMap = new Map(remoteList.map((c) => [c.id, c]));
+      const mergedList = [...remoteList];
+
+      // Retain local companies that may still be syncing to Firestore
+      for (const localComp of currentCache.companies) {
+        if (!remoteMap.has(localComp.id)) {
+          mergedList.push(localComp);
+        }
+      }
+
+      mergedList.sort((a, b) => a.no - b.no || a.nama_pt.localeCompare(b.nama_pt));
+      saveLocalCache(safeUid, { companies: mergedList });
       callbacks.onSyncState('synced');
     },
     (error) => {
@@ -926,7 +999,8 @@ export function subscribeUserData(
   const unsubBast = onSnapshot(
     qBast,
     (snap) => {
-      const list: BastDocument[] = snap.docs
+      const deletedIds = getDeletedIds(safeUid);
+      const remoteList: BastDocument[] = snap.docs
         .map((d) => {
           const data = d.data();
           return {
@@ -958,14 +1032,56 @@ export function subscribeUserData(
             updated_at: timestampToIso(data.updated_at),
           };
         })
-        .filter((b) => b.user_id === safeUid);
+        .filter((b) => b.user_id === safeUid && !deletedIds.has(b.id));
 
-      list.sort(
+      const currentCache = loadLocalCache(safeUid);
+      const remoteMap = new Map(remoteList.map((d) => [d.id, d]));
+      const mergedList = [...remoteList];
+
+      // Lossless merge: keep any locally created BAST not yet reflected in snapshot
+      for (const localDoc of currentCache.bast_documents) {
+        if (!remoteMap.has(localDoc.id) && !deletedIds.has(localDoc.id)) {
+          mergedList.push(localDoc);
+          // Try background push to Cloud Firestore to guarantee cloud backup
+          const bastRef = doc(db, 'bast_documents', localDoc.id);
+          setDoc(
+            bastRef,
+            {
+              id: localDoc.id,
+              user_id: safeUid,
+              nomor_bast: localDoc.nomor_bast,
+              tanggal_bast: localDoc.tanggal_bast,
+              kota: localDoc.kota,
+              company_id: localDoc.company_id,
+              pihak_pertama_pt: localDoc.pihak_pertama_pt,
+              pihak_pertama_nama: localDoc.pihak_pertama_nama,
+              pihak_pertama_jabatan: localDoc.pihak_pertama_jabatan,
+              pihak_pertama_alamat: localDoc.pihak_pertama_alamat,
+              pihak_kedua_nama: localDoc.pihak_kedua_nama,
+              pihak_kedua_jabatan: localDoc.pihak_kedua_jabatan,
+              pihak_kedua_alamat: localDoc.pihak_kedua_alamat,
+              nomor_po: localDoc.nomor_po,
+              deskripsi_pekerjaan: localDoc.deskripsi_pekerjaan,
+              tanggal_mulai: localDoc.tanggal_mulai,
+              tanggal_selesai: localDoc.tanggal_selesai,
+              status: localDoc.status,
+              signature_party_1: localDoc.signature_party_1,
+              signature_party_2: localDoc.signature_party_2,
+              use_stempel: localDoc.use_stempel,
+              created_at: serverTimestamp(),
+              updated_at: serverTimestamp(),
+            },
+            { merge: true }
+          ).catch(() => {});
+        }
+      }
+
+      mergedList.sort(
         (a, b) =>
           b.tanggal_bast.localeCompare(a.tanggal_bast) ||
           b.updated_at.localeCompare(a.updated_at)
       );
-      saveLocalCache(safeUid, { bast_documents: list });
+      saveLocalCache(safeUid, { bast_documents: mergedList });
       callbacks.onSyncState('synced');
     },
     (error) => {
@@ -981,7 +1097,8 @@ export function subscribeUserData(
   const unsubItems = onSnapshot(
     qItems,
     (snap) => {
-      const list: BastItem[] = snap.docs
+      const deletedIds = getDeletedIds(safeUid);
+      const remoteItems: BastItem[] = snap.docs
         .map((d) => {
           const data = d.data();
           return {
@@ -996,10 +1113,20 @@ export function subscribeUserData(
             updated_at: timestampToIso(data.updated_at),
           };
         })
-        .filter((it) => it.user_id === safeUid);
+        .filter((it) => it.user_id === safeUid && !deletedIds.has(it.bast_id));
 
-      list.sort((a, b) => a.urutan - b.urutan || a.nomor - b.nomor);
-      saveLocalCache(safeUid, { bast_items: list });
+      const currentCache = loadLocalCache(safeUid);
+      const remoteItemMap = new Map(remoteItems.map((it) => [it.id, it]));
+      const mergedItems = [...remoteItems];
+
+      for (const localItem of currentCache.bast_items) {
+        if (!remoteItemMap.has(localItem.id) && !deletedIds.has(localItem.bast_id)) {
+          mergedItems.push(localItem);
+        }
+      }
+
+      mergedItems.sort((a, b) => a.urutan - b.urutan || a.nomor - b.nomor);
+      saveLocalCache(safeUid, { bast_items: mergedItems });
     },
     (error) => {
       callbacks.onSyncState('error', error.message);
