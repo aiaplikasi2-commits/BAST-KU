@@ -81,13 +81,25 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
     try {
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: 'array' });
-      const firstSheetName = workbook.SheetNames[0];
-      if (!firstSheetName) {
+      
+      // Select the first sheet that actually contains rows
+      let sheet = workbook.Sheets[workbook.SheetNames[0]];
+      for (const sheetName of workbook.SheetNames) {
+        const s = workbook.Sheets[sheetName];
+        if (s && s['!ref']) {
+          const test = XLSX.utils.sheet_to_json<unknown[]>(s, { header: 1, defval: '' });
+          if (test && test.length > 1) {
+            sheet = s;
+            break;
+          }
+        }
+      }
+
+      if (!sheet) {
         setFileError('File Excel tidak memiliki sheet yang dapat dibaca.');
         return;
       }
 
-      const sheet = workbook.Sheets[firstSheetName];
       const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
         header: 1,
         defval: '',
@@ -97,6 +109,15 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
         setFileError('File Excel kosong. Gunakan template yang disediakan.');
         return;
       }
+
+      // Automatically clean header cells (removes asterisks, punctuation, and trims cleanly)
+      const cleanHeaderCell = (cell: unknown): string => {
+        return String(cell ?? '')
+          .toUpperCase()
+          .replace(/[^A-Z0-9/]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      };
 
       // Automatically detect the header row and map all 9 columns flexibly
       let headerRowIdx = -1;
@@ -113,39 +134,43 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
       for (let r = 0; r < Math.min(10, matrix.length); r++) {
         const row = matrix[r];
         if (!Array.isArray(row)) continue;
-        const normalized = row.map((cell) =>
-          String(cell ?? '')
-            .trim()
-            .toUpperCase()
-            .replace(/[*_]/g, '')
-            .replace(/\s+/g, ' ')
-        );
+        const normalized = row.map(cleanHeaderCell);
 
-        const idxNo = normalized.findIndex(
-          (c) => c === 'NO' || c === 'NO URUT' || c === 'NOMOR' || c === 'NOMOR URUT'
-        );
         const idxPt = normalized.findIndex(
           (c) =>
-            c === 'NAMA PT' ||
-            c === 'NAMA PERUSAHAAN' ||
-            c === 'NAMA PT / PERUSAHAAN' ||
-            c === 'NAMA PT/PERUSAHAAN' ||
-            c === 'PERUSAHAAN' ||
-            c === 'PT'
+            c.includes('NAMA PT') ||
+            c.includes('PERUSAHAAN') ||
+            c === 'PT' ||
+            c.includes('COMPANY') ||
+            c.includes('KLIEN')
         );
         const idxPejabat = normalized.findIndex(
           (c) =>
-            c === 'NAMA PEJABAT' ||
-            c === 'PEJABAT' ||
-            c === 'PERWAKILAN' ||
-            c === 'PIC'
+            (c.includes('PEJABAT') ||
+              c.includes('PIMPINAN') ||
+              c.includes('PIC') ||
+              c.includes('DIREKTUR') ||
+              c.includes('PERWAKILAN') ||
+              c === 'NAMA' ||
+              c.includes('NAMA LENGKAP')) &&
+            !c.includes('PT') &&
+            !c.includes('PERUSAHAAN')
+        );
+        const idxNo = normalized.findIndex(
+          (c) =>
+            c === 'NO' ||
+            c === 'NO URUT' ||
+            c === 'NOMOR' ||
+            c === 'NOMOR URUT' ||
+            c.startsWith('NO ') ||
+            c === 'URUT'
         );
 
-        if (idxPt !== -1 && idxPejabat !== -1) {
+        if (idxPt !== -1) {
           headerRowIdx = r;
-          colNo = idxNo !== -1 ? idxNo : 0;
           colNamaPt = idxPt;
-          colNamaPejabat = idxPejabat;
+          colNamaPejabat = idxPejabat !== -1 ? idxPejabat : (idxPt === 1 ? 2 : idxPt + 1);
+          colNo = idxNo !== -1 ? idxNo : 0;
 
           colJabatan = normalized.findIndex(
             (c) =>
@@ -200,9 +225,51 @@ export const ExcelImportView: React.FC<ExcelImportViewProps> = ({
         }
       }
 
+      // If standard header string wasn't detected, use fallback to the official 9-column template positions
+      if (headerRowIdx === -1) {
+        if (matrix.length > 0 && Array.isArray(matrix[0]) && matrix[0].length >= 2) {
+          // Check if first row is header text
+          const row0Clean = matrix[0].map(cleanHeaderCell);
+          const hasAnyHeaderKeyword = row0Clean.some(
+            (c) =>
+              c.includes('PT') ||
+              c.includes('NAMA') ||
+              c.includes('URUT') ||
+              c.includes('ALAMAT') ||
+              c.includes('PEJABAT')
+          );
+          if (hasAnyHeaderKeyword) {
+            headerRowIdx = 0;
+            colNo = 0;
+            colNamaPt = 1;
+            colNamaPejabat = 2;
+            colJabatan = 3;
+            colAlamat = 4;
+            colKota = 5;
+            colKodePos = 6;
+            colTelepon = 7;
+            colEmail = 8;
+          }
+        }
+      }
+
+      if (headerRowIdx === -1 && matrix.length > 1) {
+        // Fallback assuming row 0 is header
+        headerRowIdx = 0;
+        colNo = 0;
+        colNamaPt = 1;
+        colNamaPejabat = 2;
+        colJabatan = 3;
+        colAlamat = 4;
+        colKota = 5;
+        colKodePos = 6;
+        colTelepon = 7;
+        colEmail = 8;
+      }
+
       if (headerRowIdx === -1) {
         setFileError(
-          'Header kolom tidak sesuai. Pastikan file Excel memiliki kolom utama: No Urut | Nama PT / Perusahaan * | Nama Pejabat * (disarankan unduh template lengkap).'
+          'File Excel tidak memiliki data yang dapat dibaca. Silakan unduh Template Excel Lengkap lalu isi data perusahaan.'
         );
         setParsedRows([]);
         return;
